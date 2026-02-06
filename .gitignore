@@ -1,0 +1,9 @@
+# Build output
+bin/
+obj/
+
+# Rider / IntelliJ
+.idea/
+
+# OS
+.DS_Store
