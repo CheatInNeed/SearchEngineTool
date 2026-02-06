@@ -22,10 +22,10 @@ The project is built as a learning and portfolio project with focus on:
 - SQLite for local metadata storage
 
 ## Status
-🚧 Work in progress – early development stage.
+Work in progress – early development stage.
 
 ## Author
-Created and maintained by **[DIT NAVN]**
+Created and maintained by **Peter Roland Bøttcher Jensen** aka CheatInNeed
 
 ## License
 This project is licensed under the MIT License – see the LICENSE file for details.
