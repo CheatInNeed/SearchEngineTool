@@ -13,10 +13,8 @@ public class IndexedSearchService
     private readonly InvertedIndex _index = new();
     private readonly QueryParser _parser = new();
 
-    // TODO: map docId -> filePath (og evt. filePath -> docId)
     private readonly List<string> _docPaths = new();
-
-    // TODO 1: Byg index for en folder (kaldes fx når folder vælges)
+    
     public Task BuildIndexAsync(string rootFolder)
     {
         return Task.Run(() =>
@@ -45,8 +43,7 @@ public class IndexedSearchService
             }
         });
     }
-
-    // TODO 2: Søg (kræver at index allerede er bygget)
+    
     public Task<List<SearchResult>> SearchAsync(string query)
     {
         return Task.Run(() =>
@@ -66,11 +63,7 @@ public class IndexedSearchService
 
             var evaluator = new QueryEvaluator(_index);
             var docIds = evaluator.Evaluate(node);
-            // TODO: for hver docId:
-            // - find path
-            // - læs tekst/linjer
-            // - lav snippet (SnippetMaker) ud fra query-termer
-            // - add SearchResult(path, snippet)
+            
             foreach (var docId in docIds)
             {
                 var path = _docPaths[docId];
