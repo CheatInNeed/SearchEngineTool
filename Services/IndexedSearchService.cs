@@ -15,8 +15,13 @@ public class IndexedSearchService
 
     private readonly List<string> _docPaths = new();
     
+    private string? _indexedRootFolder;
+    
     public Task BuildIndexAsync(string rootFolder)
     {
+        rootFolder = rootFolder.Trim();
+        _indexedRootFolder = rootFolder;
+        
         return Task.Run(() =>
         {
             _index.Clear();
@@ -46,6 +51,10 @@ public class IndexedSearchService
     
     public Task<List<SearchResult>> SearchAsync(string query)
     {
+        
+        if (_indexedRootFolder is null)
+            return Task.FromResult(new List<SearchResult>());
+        
         return Task.Run(() =>
         {
             var results = new List<SearchResult>();
@@ -69,7 +78,7 @@ public class IndexedSearchService
                 var path = _docPaths[docId];
                 var lines = GetLinesFromFile(path);
 
-                var terms = Tokenizer.Tokenize(query);
+                var terms = ExtractTermsFromAst(node);
                 var snippet = SnippetMaker.MakeLineSnippet(lines, terms);
 
                 results.Add(new SearchResult(path, snippet));
@@ -98,5 +107,34 @@ public class IndexedSearchService
             default:
                 return Array.Empty<string>();
         }
+    }
+    
+    private static List<string> ExtractTermsFromAst(QueryNode node)
+    {
+        var terms = new List<string>();
+
+        void Visit(QueryNode n)
+        {
+            switch (n)
+            {
+                case TermNode t:
+                    if (!string.IsNullOrWhiteSpace(t.Term))
+                        terms.Add(t.Term);
+                    break;
+
+                case AndNode a:
+                    Visit(a.Left);
+                    Visit(a.Right);
+                    break;
+
+                case OrNode o:
+                    Visit(o.Left);
+                    Visit(o.Right);
+                    break;
+            }
+        }
+
+        Visit(node);
+        return terms;
     }
 }

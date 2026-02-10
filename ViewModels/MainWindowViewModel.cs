@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FileSearchTool.Models;
@@ -7,9 +8,14 @@ using FileSearchTool.Services;
 namespace FileSearchTool.ViewModels;
 
 // ObservableObject giver dig INotifyPropertyChanged automatisk
+
+/*
+ * Når folder vælges, byg index direkte og sæt status “Indexing…”.
+ * (Hint: kald BuildIndexAsync i PickFolder_Click eller i VM når SelectedFolder ændres.)
+ */
 public partial class MainWindowViewModel : ObservableObject
 {
-    private readonly NaiveSearchService _searchService = new();
+    private readonly IndexedSearchService _searchService = new();
 
     [ObservableProperty]
     private string? selectedFolder;
@@ -40,12 +46,20 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        Status = "Søger...";
-        var found = await _searchService.SearchAsync(SelectedFolder, Query);
+        Status = "Søger (indexed)...";
+        var found = await _searchService.SearchAsync(Query);
 
         foreach (var r in found)
             Results.Add(r);
 
         Status = $"Fandt {Results.Count} resultater.";
+    }
+    
+    public async Task BuildIndexForSelectedFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedFolder))
+            return;
+
+        await _searchService.BuildIndexAsync(SelectedFolder);
     }
 }

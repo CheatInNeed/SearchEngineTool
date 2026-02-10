@@ -30,6 +30,10 @@ public sealed record OrNode(QueryNode Left, QueryNode Right) : QueryNode
 {
 }
 
+public sealed record PhraseNode(string Phrase) : QueryNode
+{
+}
+
 // TODO 4 (valgfrit):
 // Understøt parenteser / grouping ved at parseren bygger træet rigtigt
 // (du behøver ikke en specifik node for parenteser — de styrer kun parse-strukturen)

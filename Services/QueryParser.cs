@@ -8,73 +8,88 @@ namespace FileSearchTool.Services;
 public class QueryParser
 {
     public QueryNode? Parse(string query)
+{
+    if (string.IsNullOrWhiteSpace(query)) return null;
+
+    // Materialisér tokens så vi kan indexe
+    var tokens = TokenizeQuery(query).ToList();
+    if (tokens.Count == 0) return null;
+
+    // Normalisér tokens (men lad phrases "..." være urørte her)
+    for (int j = 0; j < tokens.Count; j++)
     {
-        if (string.IsNullOrWhiteSpace(query)) return null;
+        tokens[j] = tokens[j].Trim();
+        if (tokens[j].Length == 0) return null;
 
-        // Materialisér tokens så vi kan indexe
-        var tokens = TokenizeQuery(query).ToList();
-        if (tokens.Count == 0) return null;
-        
-        for (int j = 0; j < tokens.Count; j++)
+        // Phrase tokens beholdes (MakeNodeFromToken normaliserer indholdet)
+        if (tokens[j].Length >= 2 && tokens[j].StartsWith("\"") && tokens[j].EndsWith("\""))
+            continue;
+
+        if (isAnd(tokens[j]) || isOr(tokens[j]))
+            tokens[j] = tokens[j].ToUpperInvariant();
+        else
+            tokens[j] = tokens[j].ToLowerInvariant();
+    }
+
+    int i = 0;
+
+    bool IsOp(string t) => isAnd(t) || isOr(t);
+
+    QueryNode MakeNodeFromToken(string t)
+    {
+        if (t.Length >= 2 && t.StartsWith("\"") && t.EndsWith("\""))
         {
-            tokens[j] = tokens[j].Trim();
-            if (tokens[j].Length == 0) return null; // ekstra safety
-
-            if (isAnd(tokens[j]) || isOr(tokens[j]))
-                tokens[j] = tokens[j].ToUpperInvariant();
-            else
-                tokens[j] = tokens[j].ToLowerInvariant();
+            var phrase = t.Substring(1, t.Length - 2).Trim().ToLowerInvariant();
+            return new PhraseNode(phrase);
         }
 
-        int i = 0;
+        return new TermNode(t);
+    }
 
-        bool IsOp(string t) => isAnd(t) || isOr(t);
+    QueryNode? ParseAndGroup()
+    {
+        // atom (AND atom)*
+        if (i >= tokens.Count) return null;
+        if (IsOp(tokens[i])) return null; // må ikke starte på AND/OR
 
-        QueryNode? ParseAndGroup()
+        QueryNode node = MakeNodeFromToken(tokens[i]);
+        i++;
+
+        while (i < tokens.Count && isAnd(tokens[i]))
         {
-            // term (AND term)*
-            if (i >= tokens.Count) return null;
-            if (IsOp(tokens[i])) return null; // må ikke starte på AND/OR
+            i++; // skip AND
 
-            QueryNode node = new TermNode(tokens[i]);
+            if (i >= tokens.Count) return null;
+            if (IsOp(tokens[i])) return null;
+
+            QueryNode right = MakeNodeFromToken(tokens[i]);
             i++;
 
-            while (i < tokens.Count && isAnd(tokens[i]))
-            {
-                i++; // skip AND
-
-                // skal komme et term efter AND
-                if (i >= tokens.Count) return null;
-                if (IsOp(tokens[i])) return null;
-
-                QueryNode right = new TermNode(tokens[i]);
-                i++;
-
-                node = new AndNode(node, right);
-            }
-
-            return node;
+            node = new AndNode(node, right);
         }
 
-        // Start: første AND-gruppe
-        QueryNode? root = ParseAndGroup();
-        if (root is null) return null;
-
-        // OR binder grupper sammen: AndGroup (OR AndGroup)*
-        while (i < tokens.Count)
-        {
-            // forvent OR her (ellers invalid query som "cat dog" eller "cat AND OR dog")
-            if (!isOr(tokens[i])) return null;
-            i++; // skip OR
-
-            QueryNode? right = ParseAndGroup();
-            if (right is null) return null;
-
-            root = new OrNode(root, right);
-        }
-
-        return root;
+        return node;
     }
+
+    // Start: første AND-gruppe
+    QueryNode? root = ParseAndGroup();
+    if (root is null) return null;
+
+    // OR binder grupper sammen: AndGroup (OR AndGroup)*
+    while (i < tokens.Count)
+    {
+        if (!isOr(tokens[i])) return null;
+        i++; // skip OR
+
+        QueryNode? right = ParseAndGroup();
+        if (right is null) return null;
+
+        root = new OrNode(root, right);
+    }
+
+    return root;
+}
+
 
     private static bool isAnd(string t)
     {
@@ -88,36 +103,62 @@ public class QueryParser
 
     private static IEnumerable<string> TokenizeQuery(string query)
     {
-        var currentQuery = new StringBuilder();
+        var tokens = new List<string>();
+        var sb = new StringBuilder();
+        bool inQuotes = false;
 
-        foreach (char ch in query)
+        void FlushToken()
         {
-            if (char.IsLetterOrDigit(ch))
-            {
-                currentQuery.Append(char.ToLowerInvariant(ch));
-            }
-            else
-            {
-                if (currentQuery.Length > 0)
-                {
-                    var tok = currentQuery.ToString();
-                    if (isAnd(tok) || isOr(tok))
-                        yield return tok.ToUpperInvariant();
-                    else
-                        yield return tok;
+            if (sb.Length == 0) return;
 
-                    currentQuery.Clear();
-                }
-            }
-        }
+            var tok = sb.ToString().Trim();
+            sb.Clear();
 
-        if (currentQuery.Length > 0)
-        {
-            var tok = currentQuery.ToString();
+            if (tok.Length == 0) return;
+
+            if (inQuotes)
+            {
+                // Marker phrase ved at beholde "" rundt om
+                tokens.Add($"\"{tok}\"");
+                return;
+            }
+
             if (isAnd(tok) || isOr(tok))
-                yield return tok.ToUpperInvariant();
+                tokens.Add(tok.ToUpperInvariant());
             else
-                yield return tok;
+                tokens.Add(tok.ToLowerInvariant());
         }
+
+        for (int i = 0; i < query.Length; i++)
+        {
+            char ch = query[i];
+
+            if (ch == '"')
+            {
+                // skift quote-tilstand, og flush det der er samlet op indtil nu
+                FlushToken();
+                inQuotes = !inQuotes;
+                continue;
+            }
+
+            if (inQuotes)
+            {
+                // inde i quotes: behold alt (inkl mellemrum)
+                sb.Append(ch);
+            }
+            else
+            {
+                // uden for quotes: kun bogstaver/tal bygger token, alt andet splitter
+                if (char.IsLetterOrDigit(ch))
+                    sb.Append(ch);
+                else
+                    FlushToken();
+            }
+        }
+
+        // flush sidste token
+        FlushToken();
+
+        return tokens;
     }
 }
