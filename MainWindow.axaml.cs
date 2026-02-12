@@ -32,10 +32,7 @@ public partial class MainWindow : Window
         {
             vm.SelectedFolder = folder.Path.LocalPath;
 
-            vm.Status = "Indekserer filer...";
-            await vm.BuildIndexForSelectedFolderAsync();
-
-            vm.Status = "Mappe valgt. Skriv en query og tryk Search.";
+            vm.Status = "Mappe valgt. Klar til søgning.";
         }
     }
 }

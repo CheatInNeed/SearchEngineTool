@@ -15,7 +15,7 @@ namespace FileSearchTool.ViewModels;
  */
 public partial class MainWindowViewModel : ObservableObject
 {
-    private readonly IndexedSearchService _searchService = new();
+    private readonly NaiveSearchService _searchService = new();
 
     [ObservableProperty]
     private string? selectedFolder;
@@ -30,36 +30,34 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Denne command kaldes fra UI når du trykker "Search"
     [RelayCommand]
-    private async System.Threading.Tasks.Task SearchAsync()
+    private async Task SearchAsync()
     {
-        Results.Clear();
-
         if (string.IsNullOrWhiteSpace(SelectedFolder))
         {
-            Status = "Ingen mappe valgt.";
+            Status = "Vælg først en mappe.";
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(Query))
-        {
-            Status = "Skriv en query.";
-            return;
-        }
+        Status = "Søger...";
 
-        Status = "Søger (indexed)...";
-        var found = await _searchService.SearchAsync(Query);
+        var found = await _searchService.SearchAsync(SelectedFolder, Query);
 
+        Results.Clear();
         foreach (var r in found)
             Results.Add(r);
 
         Status = $"Fandt {Results.Count} resultater.";
     }
     
-    public async Task BuildIndexForSelectedFolderAsync()
+    public Task BuildIndexForSelectedFolderAsync()
     {
-        if (string.IsNullOrWhiteSpace(SelectedFolder))
-            return;
-
-        await _searchService.BuildIndexAsync(SelectedFolder);
+        // Midlertidigt: NaiveSearchService bygger ikke index.
+        // Vi tester bare PDF-extraction via SearchAsync.
+        Status = "Klar til søgning (ingen indeks bruges i test-mode).";
+        return Task.CompletedTask;
     }
 }
+
+// TODO 1: Når SelectedFolder sættes, disable "Search" indtil indexing er færdig (valgfrit)
+// TODO 2: Vis "Indexing progress" (antal filer processeret / total) (valgfrit men fedt)
+// TODO 3: Håndter hvis SearchAsync kaldes før index er bygget (returner tomt + status)

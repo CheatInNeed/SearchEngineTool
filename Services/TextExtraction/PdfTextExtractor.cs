@@ -20,8 +20,16 @@ public class PdfTextExtractor: ITextExtractor
 
             foreach (var page in doc.GetPages())
             {
-                var text = page.Text;
-                sb.AppendLine(text);
+
+                var words = page.GetWords();
+
+                foreach (var word in words)
+                {
+                    sb.Append(word.Text);
+                    sb.Append(" ");
+                }
+
+                sb.AppendLine();
             }
 
             var result = sb.ToString();

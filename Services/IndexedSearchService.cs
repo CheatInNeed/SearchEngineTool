@@ -1,140 +1,44 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using FileSearchTool.Models;
-
 namespace FileSearchTool.Services;
 
 public class IndexedSearchService
 {
-    private readonly FileCrawler _crawler = new();
-    private readonly InvertedIndex _index = new();
-    private readonly QueryParser _parser = new();
+    // TODO 0: Tilføj FileCrawler dependency
 
-    private readonly List<string> _docPaths = new();
-    
-    private string? _indexedRootFolder;
-    
-    public Task BuildIndexAsync(string rootFolder)
-    {
-        rootFolder = rootFolder.Trim();
-        _indexedRootFolder = rootFolder;
-        
-        return Task.Run(() =>
-        {
-            _index.Clear();
-            _docPaths.Clear();
+// TODO 1: I BuildIndexAsync(rootFolder):
+// - foreach file i crawler.GetFiles(rootFolder)
+// - brug TextExtractorFactory.Create(file).ExtractText(file)
+// - gem midlertidigt i en Dictionary<string, string> (path -> extractedText)
+//   (det er kun for at verificere pipeline, Lucene kommer bagefter)
 
-            // 2) Find filer
-            var files = _crawler.GetFiles(rootFolder);
+// TODO 2: Lav en simpel SearchAsync(query) der søger i dictionary-teksterne (midlertidigt)
+// - så kan du teste end-to-end uden Lucene
 
-            try
-            {
-                foreach (var path in files)
-                {
-                    int docId = _docPaths.Count;
-                    _docPaths.Add(path);
-                    string text = File.ReadAllText(path);
-                    var tokens = Tokenizer.Tokenize(text);
-                    _index.Add(docId, tokens);
-                }
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-                throw;
-            }
-        });
-    }
-    
-    public Task<List<SearchResult>> SearchAsync(string query)
-    {
-        
-        if (_indexedRootFolder is null)
-            return Task.FromResult(new List<SearchResult>());
-        
-        return Task.Run(() =>
-        {
-            var results = new List<SearchResult>();
-
-            if (string.IsNullOrEmpty(query))
-            {
-                return results;
-            }
-
-            var node = _parser.Parse(query);
-            if (node==null)
-            {
-                return results;
-            }
-
-            var evaluator = new QueryEvaluator(_index);
-            var docIds = evaluator.Evaluate(node);
-            
-            foreach (var docId in docIds)
-            {
-                var path = _docPaths[docId];
-                var lines = GetLinesFromFile(path);
-
-                var terms = ExtractTermsFromAst(node);
-                var snippet = SnippetMaker.MakeLineSnippet(lines, terms);
-
-                results.Add(new SearchResult(path, snippet));
-            }
-
-            return results;
-        });
-    }
-
-    private string[] GetLinesFromFile(string path)
-    {
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-
-        switch (ext)
-        {
-            case ".txt":
-            case ".md":
-            case ".cs":
-                return File.ReadAllLines(path);
-
-            case ".pdf":
-            // TODO senere:
-            // var text = ExtractTextFromPdf(path);
-            // return text.Split('\n');
-
-            default:
-                return Array.Empty<string>();
-        }
-    }
-    
-    private static List<string> ExtractTermsFromAst(QueryNode node)
-    {
-        var terms = new List<string>();
-
-        void Visit(QueryNode n)
-        {
-            switch (n)
-            {
-                case TermNode t:
-                    if (!string.IsNullOrWhiteSpace(t.Term))
-                        terms.Add(t.Term);
-                    break;
-
-                case AndNode a:
-                    Visit(a.Left);
-                    Visit(a.Right);
-                    break;
-
-                case OrNode o:
-                    Visit(o.Left);
-                    Visit(o.Right);
-                    break;
-            }
-        }
-
-        Visit(node);
-        return terms;
-    }
 }
+
+// TODO 1: Tilføj dependency til:
+// - FileCrawler
+// - TextExtractorFactory (ny)
+// - LuceneIndexService (ny)
+// - LuceneSearchService eller LuceneQueryBuilder (ny)
+
+// TODO 2 (BuildIndexAsync):
+// - Find alle filer via _crawler.GetFiles(rootFolder)
+// - For hver fil: brug TextExtractorFactory til at ExtractText(path)
+// - Tilføj dokument til Lucene index (felter: path, content, evt. filename/extension)
+// - Gem index på disk (ikke kun i memory)
+
+// TODO 3 (SearchAsync):
+// - Byg en Lucene query ud fra brugerens input:
+// - phrase query på hele input (boost højt)
+// - OR/SHOULD på hvert token i input (boost lavere)
+// - Kør search i index og få top N hits
+// - For hvert hit: find path + lav snippet
+
+// TODO 4 (Snippet):
+// - Hent noget tekst at lave snippet fra:
+// - enten via stored field i Lucene (hvis du gemmer content i index)
+// - eller ved at gen-extracte text fra filen (langsommere men simpelt)
+// - Brug SnippetMaker (opdateret) til at lave et kort snippet
+
+// TODO 5: Error handling
+// - PDF/DOCX kan fejle; sørg for at du ikke crasher hele indexing pga én fil

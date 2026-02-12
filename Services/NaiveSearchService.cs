@@ -30,10 +30,29 @@ public class NaiveSearchService
                 {
                     var extractor = TextExtractorFactory.Create(file);
                     var text = extractor.ExtractText(file);
+                    var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-                    if (text.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    
+
+                    var phraseMatch = text.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+                    var termMatch = false;
+
+                    if (!phraseMatch)
                     {
-                        var snippet = MakeSnippet(text, query);
+                        foreach (var term in terms)
+                        {
+                            if (text.Contains(term, StringComparison.OrdinalIgnoreCase))
+                            {
+                                termMatch = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (phraseMatch || termMatch)
+                    {
+                        var snippet = SnippetMaker.MakeSnippet(text, terms);
                         results.Add(new SearchResult(file, snippet));
                     }
                 }
