@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using FileSearchTool.Models;
+using FileSearchTool.Services.TextExtraction;
 
 namespace FileSearchTool.Services;
 
@@ -13,7 +14,6 @@ public class NaiveSearchService
 
     public Task<List<SearchResult>> SearchAsync(string rootFolder, string query)
     {
-        // Kør den "tunge" søgning på en baggrundstråd så UI ikke fryser.
         return Task.Run(() =>
         {
             var results = new List<SearchResult>();
@@ -28,18 +28,37 @@ public class NaiveSearchService
             {
                 try
                 {
-                    var text = File.ReadAllText(file);
+                    var extractor = TextExtractorFactory.Create(file);
+                    var text = extractor.ExtractText(file);
+                    var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-                    if (text.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    
+
+                    var phraseMatch = text.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+                    var termMatch = false;
+
+                    if (!phraseMatch)
                     {
-                        // Lav et ultra simpelt snippet:
-                        var snippet = MakeSnippet(text, query);
+                        foreach (var term in terms)
+                        {
+                            if (text.Contains(term, StringComparison.OrdinalIgnoreCase))
+                            {
+                                termMatch = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (phraseMatch || termMatch)
+                    {
+                        var snippet = SnippetMaker.MakeSnippet(text, terms);
                         results.Add(new SearchResult(file, snippet));
                     }
                 }
                 catch
                 {
-                    // Ignorér filer vi ikke kan læse (permissions, encoding, osv.)
+                    
                 }
             }
 
@@ -49,13 +68,45 @@ public class NaiveSearchService
 
     private static string MakeSnippet(string text, string query)
     {
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(query))
+            return "";
+
+        // Prøv først at finde hele frasen
         var idx = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0) return "";
 
-        var start = Math.Max(0, idx - 40);
-        var length = Math.Min(text.Length - start, 120);
+        // Hvis ikke fundet, fallback til første ord i query
+        if (idx < 0)
+        {
+            var firstWord = query.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (firstWord == null) return "";
 
-        var snippet = text.Substring(start, length).Replace("\r", " ").Replace("\n", " ");
+            idx = text.IndexOf(firstWord, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) return "";
+            query = firstWord;
+        }
+
+        // Bestem snippet-område
+        const int context = 60;
+
+        var start = Math.Max(0, idx - context);
+        var end = Math.Min(text.Length, idx + query.Length + context);
+
+        var snippet = text.Substring(start, end - start);
+
+        // Normalisér whitespace
+        snippet = snippet.Replace("\r", " ").Replace("\n", " ");
+        while (snippet.Contains("  "))
+            snippet = snippet.Replace("  ", " ");
+
+        snippet = snippet.Trim();
+
+        // Highlight match (simpel version)
+        snippet = snippet.Replace(
+            query,
+            $"**{query}**",
+            StringComparison.OrdinalIgnoreCase
+        );
+
         return snippet;
     }
 }
