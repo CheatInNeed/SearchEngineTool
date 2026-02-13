@@ -4,6 +4,7 @@ using FileSearchTool.ViewModels;
 using System.Linq;
 using System.Threading.Tasks;
 using FileSearchTool.Services;
+using Avalonia.Input;
 
 namespace FileSearchTool;
 
@@ -33,6 +34,17 @@ public partial class MainWindow : Window
             vm.SelectedFolder = folder.Path.LocalPath;
 
             vm.Status = "Mappe valgt. Klar til søgning.";
+        }
+    }
+    
+    private void QueryBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && DataContext is MainWindowViewModel vm)
+        {
+            if (vm.SearchCommand.CanExecute(null))
+                vm.SearchCommand.Execute(null);
+
+            e.Handled = true;
         }
     }
 }
