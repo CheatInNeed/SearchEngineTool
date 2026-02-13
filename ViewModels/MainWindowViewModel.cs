@@ -17,8 +17,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     private const int MaxRecentFolders = 10;
 
-    public ObservableCollection<string> RecentFolders { get; } = new();
-
+    public ObservableCollection<FolderItem> RecentFolders { get; } = new();
     [ObservableProperty]
     private string? selectedFolder;
 
@@ -57,11 +56,11 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void AddRecentFolder(string folder)
     {
-        // fjern hvis den allerede findes (så vi kan flytte den til toppen)
-        var existing = RecentFolders.FirstOrDefault(f => string.Equals(f, folder, StringComparison.OrdinalIgnoreCase));
+        var existing = RecentFolders.FirstOrDefault(f =>
+            string.Equals(f.FullPath, folder, StringComparison.OrdinalIgnoreCase));
         if (existing != null) RecentFolders.Remove(existing);
 
-        RecentFolders.Insert(0, folder);
+        RecentFolders.Insert(0, new FolderItem(folder));
 
         while (RecentFolders.Count > MaxRecentFolders)
             RecentFolders.RemoveAt(RecentFolders.Count - 1);
@@ -78,11 +77,11 @@ public partial class MainWindowViewModel : ObservableObject
 
             RecentFolders.Clear();
             foreach (var f in items.Where(Directory.Exists))
-                RecentFolders.Add(f);
+                RecentFolders.Add(new FolderItem(f));
 
             // auto-vælg seneste folder (valgfrit)
             if (SelectedFolder == null && RecentFolders.Count > 0)
-                SelectedFolder = RecentFolders[0];
+                SelectedFolder = RecentFolders[0].FullPath;
         }
         catch
         {
@@ -94,7 +93,10 @@ public partial class MainWindowViewModel : ObservableObject
     {
         try
         {
-            var json = JsonSerializer.Serialize(RecentFolders.ToArray(), new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(
+                RecentFolders.Select(f => f.FullPath).ToArray(),
+                new JsonSerializerOptions { WriteIndented = true }
+            );
             await File.WriteAllTextAsync(RecentFoldersPath, json);
         }
         catch

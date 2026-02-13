@@ -16,10 +16,10 @@
                 <ListBox ItemsSource="{Binding RecentFolders}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Button Content="{Binding .}"
+                            <Button Content="{Binding Name}"
                                     HorizontalAlignment="Stretch"
                                     Click="RecentFolder_Click"
-                                    Tag="{Binding .}"/>
+                                    Tag="{Binding FullPath}"/>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -53,7 +53,7 @@
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <StackPanel Spacing="2">
-                        <TextBlock Text="{Binding FilePath}" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding FileName}" FontWeight="Bold"/>
                         <TextBlock Text="{Binding Snippet}" Opacity="0.8" TextWrapping="Wrap"/>
                     </StackPanel>
                 </DataTemplate>
