@@ -220,6 +220,9 @@ public static class SnippetMaker
             }
         }
         
+        if (hits.Count == 0)
+            return new List<string>();
+        
         // 1) Sortér hits på startIndex
         hits = hits
             .OrderBy(h => h.Start)
