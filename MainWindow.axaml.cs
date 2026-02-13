@@ -47,18 +47,4 @@ public partial class MainWindow : Window
             e.Handled = true;
         }
     }
-    
-    private void RecentFolder_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (sender is not Button btn) return;
-        if (btn.Tag is not string folder) return;
-
-        if (DataContext is MainWindowViewModel vm)
-        {
-            // kalder din RelayCommand (genereret property)
-            if (vm.UseRecentFolderCommand.CanExecute(folder))
-                vm.UseRecentFolderCommand.Execute(folder);
-        }
-    }
-
 }

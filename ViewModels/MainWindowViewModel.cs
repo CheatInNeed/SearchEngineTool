@@ -16,6 +16,8 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly NaiveSearchService _searchService = new();
 
     private const int MaxRecentFolders = 10;
+    
+    private bool _syncingSelection;
 
     public ObservableCollection<FolderItem> RecentFolders { get; } = new();
     [ObservableProperty]
@@ -23,8 +25,24 @@ public partial class MainWindowViewModel : ObservableObject
 
     partial void OnSelectedFolderChanged(string? value)
     {
+        if (_syncingSelection) return;
         if (string.IsNullOrWhiteSpace(value)) return;
+
         AddRecentFolder(value);
+
+        try
+        {
+            _syncingSelection = true;
+
+            // sync list selection til folder
+            SelectedRecentFolder = RecentFolders.FirstOrDefault(f =>
+                string.Equals(f.FullPath, value, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _syncingSelection = false;
+        }
+
         _ = SaveRecentFoldersAsync();
     }
 
@@ -129,5 +147,29 @@ public partial class MainWindowViewModel : ObservableObject
 
         SelectedResult = Results.FirstOrDefault();
         Status = $"Fandt {Results.Count} resultater.";
+    }
+    
+    [ObservableProperty]
+    private FolderItem? selectedRecentFolder;
+
+    partial void OnSelectedRecentFolderChanged(FolderItem? value)
+    {
+        if (_syncingSelection) return;
+        if (value == null) return;
+
+        if (!Directory.Exists(value.FullPath))
+            return;
+
+        try
+        {
+            _syncingSelection = true;
+
+            // sync folder til list selection
+            SelectedFolder = value.FullPath;
+        }
+        finally
+        {
+            _syncingSelection = false;
+        }
     }
 }
