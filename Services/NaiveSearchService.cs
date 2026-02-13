@@ -30,13 +30,10 @@ public class NaiveSearchService
                 {
                     var extractor = TextExtractorFactory.Create(file);
                     var text = extractor.ExtractText(file);
-                    var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
                     
-
+                    var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     var phraseMatch = text.Contains(query, StringComparison.OrdinalIgnoreCase);
-
-                    var termMatch = false;
+                    var termMatch = terms.Any(t => text.Contains(t, StringComparison.OrdinalIgnoreCase));
 
                     if (!phraseMatch)
                     {
@@ -52,8 +49,40 @@ public class NaiveSearchService
 
                     if (phraseMatch || termMatch)
                     {
-                        var snippet = SnippetMaker.MakeSnippet(text, terms);
-                        results.Add(new SearchResult(file, snippet));
+                        var normalizedTerms = terms
+                            .Where(t => !string.IsNullOrWhiteSpace(t))
+                            .Select(t => t.Trim())
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+
+                        var matchedTerms = new List<string>();
+
+                        if (phraseMatch)
+                        {
+                            matchedTerms.AddRange(normalizedTerms);
+                        }
+                        else
+                        {
+                            foreach (var term in normalizedTerms)
+                            {
+                                if (text.Contains(term, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    matchedTerms.Add(term);
+                                }
+                            }
+                        }
+                        
+                        matchedTerms = matchedTerms
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                        
+                        
+                        var snippets = SnippetMaker.MakeSnippets(text, query, matchedTerms);
+
+                        for (int i = 0; i < snippets.Count; i++)
+                        {
+                            results.Add(new SearchResult(file, snippets[i], i + 1));
+                        }
                     }
                 }
                 catch
@@ -64,49 +93,5 @@ public class NaiveSearchService
 
             return results;
         });
-    }
-
-    private static string MakeSnippet(string text, string query)
-    {
-        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(query))
-            return "";
-
-        // Prøv først at finde hele frasen
-        var idx = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-
-        // Hvis ikke fundet, fallback til første ord i query
-        if (idx < 0)
-        {
-            var firstWord = query.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            if (firstWord == null) return "";
-
-            idx = text.IndexOf(firstWord, StringComparison.OrdinalIgnoreCase);
-            if (idx < 0) return "";
-            query = firstWord;
-        }
-
-        // Bestem snippet-område
-        const int context = 60;
-
-        var start = Math.Max(0, idx - context);
-        var end = Math.Min(text.Length, idx + query.Length + context);
-
-        var snippet = text.Substring(start, end - start);
-
-        // Normalisér whitespace
-        snippet = snippet.Replace("\r", " ").Replace("\n", " ");
-        while (snippet.Contains("  "))
-            snippet = snippet.Replace("  ", " ");
-
-        snippet = snippet.Trim();
-
-        // Highlight match (simpel version)
-        snippet = snippet.Replace(
-            query,
-            $"**{query}**",
-            StringComparison.OrdinalIgnoreCase
-        );
-
-        return snippet;
     }
 }
