@@ -48,7 +48,7 @@ public class LuceneSearchService
             var indexDirPath = _indexPaths.GetIndexDirectory(rootFolder);
 
             // If no index exists, return empty
-            if (!System.IO.Directory.Exists(indexDirPath))
+            if (!System.IO.Directory.Exists(indexDirPath)) 
                 return results;
 
             using var dir = FSDirectory.Open(new DirectoryInfo(indexDirPath));
