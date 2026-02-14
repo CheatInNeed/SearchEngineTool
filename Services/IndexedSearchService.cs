@@ -1,44 +1,114 @@
+using System;
+using System.Threading.Tasks;
+using FileSearchTool.Services.Lucene;
+using FileSearchTool.Services.TextExtraction;
+using Lucene.Net.Analysis;
+using Lucene.Net.Analysis.Standard;
+using Lucene.Net.Util;
+using System.Collections.Generic;
+using System.Linq;
+using FileSearchTool.Models;
+using FileSearchTool.Services.TextExtraction;
+
 namespace FileSearchTool.Services;
 
 public class IndexedSearchService
 {
-    // TODO 0: Tilføj FileCrawler dependency
+    private readonly FileCrawler _fileCrawler = new FileCrawler();
 
-// TODO 1: I BuildIndexAsync(rootFolder):
-// - foreach file i crawler.GetFiles(rootFolder)
-// - brug TextExtractorFactory.Create(file).ExtractText(file)
-// - gem midlertidigt i en Dictionary<string, string> (path -> extractedText)
-//   (det er kun for at verificere pipeline, Lucene kommer bagefter)
+    // Delte Lucene dependencies (samme analyzer bruges begge steder!)
+    private readonly LuceneIndexPaths _indexPaths = new LuceneIndexPaths();
+    private readonly Analyzer _analyzer = new StandardAnalyzer(LuceneVersion.LUCENE_48);
 
-// TODO 2: Lav en simpel SearchAsync(query) der søger i dictionary-teksterne (midlertidigt)
-// - så kan du teste end-to-end uden Lucene
+    private readonly LuceneIndexService _luceneIndexService;
+    private readonly LuceneSearchService _luceneSearchService;
 
+    public IndexedSearchService()
+    {
+        _luceneIndexService = new LuceneIndexService(_indexPaths, _analyzer);
+        _luceneSearchService = new LuceneSearchService(_indexPaths, _analyzer);
+    }
+    
+    // We use this to know if rootFolder already exists.
+    private string? _indexedRootFolder;
+    
+    public async Task BuildIndexAsync(string rootFolder)
+    {
+        if (string.IsNullOrWhiteSpace(rootFolder))
+            return;
+        
+        var files = _fileCrawler.GetFiles(rootFolder);
+
+        var docs = new List<(string path, string content)>();
+        foreach (var file in files)
+        {
+            try
+            {
+                var extractor = TextExtractorFactory.Create(file);
+                var text = extractor.ExtractText(file);
+
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    docs.Add((file, text));
+                }
+            }
+            catch (Exception e)
+            {
+                
+            }
+        }
+        await _luceneIndexService.BuildOrUpdateIndexAsync(rootFolder, docs);
+    }
+
+    public async Task<List<SearchResult>> SearchAsync(string rootFolder, string? query)
+    {
+        var results = new List<SearchResult>();
+
+        if (string.IsNullOrWhiteSpace(rootFolder) || string.IsNullOrWhiteSpace(query))
+            return results;
+
+        if (_indexedRootFolder != rootFolder || !_luceneIndexService.IndexExists(rootFolder))
+        {
+            await BuildIndexAsync(rootFolder);
+            _indexedRootFolder = rootFolder;
+        }
+
+        var hits = _luceneSearchService.Search(rootFolder, query);
+
+        foreach (var (path, score, storedContent) in hits)
+        {
+            try
+            {
+                string text;
+                if (!string.IsNullOrWhiteSpace(storedContent))
+                {
+                    text = storedContent!;
+                }
+                else
+                {
+                    var extractor = TextExtractorFactory.Create(path);
+                    text = extractor.ExtractText(path);
+                }
+
+                var tokens = query
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var snippets = SnippetMaker.MakeSnippets(text, query, tokens);
+
+                for (int i = 0; i < snippets.Count; i++)
+                {
+                    results.Add(new SearchResult(path, snippets[i], i + 1));
+                }
+                
+            }
+            catch (Exception e)
+            {
+                
+            }
+        }
+
+        return results;
+    }
 }
-
-// TODO 1: Tilføj dependency til:
-// - FileCrawler
-// - TextExtractorFactory (ny)
-// - LuceneIndexService (ny)
-// - LuceneSearchService eller LuceneQueryBuilder (ny)
-
-// TODO 2 (BuildIndexAsync):
-// - Find alle filer via _crawler.GetFiles(rootFolder)
-// - For hver fil: brug TextExtractorFactory til at ExtractText(path)
-// - Tilføj dokument til Lucene index (felter: path, content, evt. filename/extension)
-// - Gem index på disk (ikke kun i memory)
-
-// TODO 3 (SearchAsync):
-// - Byg en Lucene query ud fra brugerens input:
-// - phrase query på hele input (boost højt)
-// - OR/SHOULD på hvert token i input (boost lavere)
-// - Kør search i index og få top N hits
-// - For hvert hit: find path + lav snippet
-
-// TODO 4 (Snippet):
-// - Hent noget tekst at lave snippet fra:
-// - enten via stored field i Lucene (hvis du gemmer content i index)
-// - eller ved at gen-extracte text fra filen (langsommere men simpelt)
-// - Brug SnippetMaker (opdateret) til at lave et kort snippet
-
-// TODO 5: Error handling
-// - PDF/DOCX kan fejle; sørg for at du ikke crasher hele indexing pga én fil
