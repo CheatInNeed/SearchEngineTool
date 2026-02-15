@@ -13,123 +13,46 @@ namespace FileSearchTool.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject
 {
-    private readonly NaiveSearchService _searchService = new();
+    private readonly IndexedSearchService _searchService = new IndexedSearchService();
 
-    private const int MaxRecentFolders = 10;
+    [ObservableProperty] private string? selectedFolder;
+    [ObservableProperty] private string status = "Vælge en mappe og søg.";
     
-    private bool _syncingSelection;
-
-    public ObservableCollection<FolderItem> RecentFolders { get; } = new();
-    [ObservableProperty]
-    private string? selectedFolder;
-
-    partial void OnSelectedFolderChanged(string? value)
-    {
-        if (_syncingSelection) return;
-        if (string.IsNullOrWhiteSpace(value)) return;
-
-        AddRecentFolder(value);
-
-        try
-        {
-            _syncingSelection = true;
-
-            // sync list selection til folder
-            SelectedRecentFolder = RecentFolders.FirstOrDefault(f =>
-                string.Equals(f.FullPath, value, StringComparison.OrdinalIgnoreCase));
-        }
-        finally
-        {
-            _syncingSelection = false;
-        }
-
-        _ = SaveRecentFoldersAsync();
-    }
-
-    [ObservableProperty]
-    private string? query;
-
-    [ObservableProperty]
-    private string status = "Vælg en mappe og søg.";
-
     public ObservableCollection<SearchResult> Results { get; } = new();
 
     [ObservableProperty]
     private SearchResult? selectedResult;
 
-    public MainWindowViewModel()
+    [ObservableProperty]
+    private string? query;
+    
+    partial void OnSelectedFolderChanged(string? value)
     {
-        _ = LoadRecentFoldersAsync();
+        if (string.IsNullOrWhiteSpace(value) || !Directory.Exists(value))
+        {
+            Status = "Vælg en gyldig mappe.";
+            return;
+        }
+        _ = IndexFolderAsync(value);
     }
 
-    private static string GetAppDataDir()
-    {
-        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var dir = Path.Combine(baseDir, "FileSearchTool");
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
-
-    private static string RecentFoldersPath => Path.Combine(GetAppDataDir(), "recent-folders.json");
-
-    private void AddRecentFolder(string folder)
-    {
-        var existing = RecentFolders.FirstOrDefault(f =>
-            string.Equals(f.FullPath, folder, StringComparison.OrdinalIgnoreCase));
-        if (existing != null) RecentFolders.Remove(existing);
-
-        RecentFolders.Insert(0, new FolderItem(folder));
-
-        while (RecentFolders.Count > MaxRecentFolders)
-            RecentFolders.RemoveAt(RecentFolders.Count - 1);
-    }
-
-    private async Task LoadRecentFoldersAsync()
+    private async Task IndexFolderAsync(string folder)
     {
         try
         {
-            if (!File.Exists(RecentFoldersPath)) return;
+            Status = "Indekserer...";
 
-            var json = await File.ReadAllTextAsync(RecentFoldersPath);
-            var items = JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>();
+            await _searchService.BuildIndexAsync(folder);
 
-            RecentFolders.Clear();
-            foreach (var f in items.Where(Directory.Exists))
-                RecentFolders.Add(new FolderItem(f));
-
-            // auto-vælg seneste folder (valgfrit)
-            if (SelectedFolder == null && RecentFolders.Count > 0)
-                SelectedFolder = RecentFolders[0].FullPath;
+            Status = "Klar til søgning.";
         }
         catch
         {
-            // swallow: UX feature må ikke crashe app
+            Status = "Kunne ikke indeksere mappen (nogle filer kunne ikke læses).";
         }
     }
 
-    private async Task SaveRecentFoldersAsync()
-    {
-        try
-        {
-            var json = JsonSerializer.Serialize(
-                RecentFolders.Select(f => f.FullPath).ToArray(),
-                new JsonSerializerOptions { WriteIndented = true }
-            );
-            await File.WriteAllTextAsync(RecentFoldersPath, json);
-        }
-        catch
-        {
-        }
-    }
 
-    [RelayCommand]
-    private void UseRecentFolder(string folder)
-    {
-        if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
-            SelectedFolder = folder;
-    }
-
-    [RelayCommand]
     private async Task SearchAsync()
     {
         if (string.IsNullOrWhiteSpace(SelectedFolder))
@@ -138,38 +61,27 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        Status = "Søger...";
-        var found = await _searchService.SearchAsync(SelectedFolder, Query);
-
-        Results.Clear();
-        foreach (var r in found)
-            Results.Add(r);
-
-        SelectedResult = Results.FirstOrDefault();
-        Status = $"Fandt {Results.Count} resultater.";
-    }
-    
-    [ObservableProperty]
-    private FolderItem? selectedRecentFolder;
-
-    partial void OnSelectedRecentFolderChanged(FolderItem? value)
-    {
-        if (_syncingSelection) return;
-        if (value == null) return;
-
-        if (!Directory.Exists(value.FullPath))
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            Status = "Skriv en søgning.";
             return;
-
+        }
+        
         try
         {
-            _syncingSelection = true;
+            status = "Søger...";
+            
+            var found = await _searchService.SearchAsync(selectedFolder, query);
+            Results.Clear();
+            foreach (var r in found)
+                Results.Add(r);
 
-            // sync folder til list selection
-            SelectedFolder = value.FullPath;
+            SelectedResult = Results.FirstOrDefault();
+            Status = $"Fandt {Results.Count} resultater.";
         }
-        finally
+        catch (Exception e)
         {
-            _syncingSelection = false;
+            Status = "Fejl under søgning.";
         }
     }
 }
