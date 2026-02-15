@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using FileSearchTool.Models;
 using FileSearchTool.Services.TextExtraction;
+using System.Threading;
 
 namespace FileSearchTool.Services;
 
@@ -22,6 +23,8 @@ public class IndexedSearchService
 
     private readonly LuceneIndexService _luceneIndexService;
     private readonly LuceneSearchService _luceneSearchService;
+    
+    private readonly SemaphoreSlim _indexLock = new SemaphoreSlim(1, 1);
 
     public IndexedSearchService()
     {
@@ -36,29 +39,38 @@ public class IndexedSearchService
     {
         if (string.IsNullOrWhiteSpace(rootFolder))
             return;
-        
-        var files = _fileCrawler.GetFiles(rootFolder);
 
-        var docs = new List<(string path, string content)>();
-        foreach (var file in files)
+        await _indexLock.WaitAsync();
+        try
         {
-            try
-            {
-                var extractor = TextExtractorFactory.Create(file);
-                var text = extractor.ExtractText(file);
+            var files = _fileCrawler.GetFiles(rootFolder);
 
-                if (!string.IsNullOrWhiteSpace(text))
+            var docs = new List<(string path, string content)>();
+            foreach (var file in files)
+            {
+                try
                 {
-                    docs.Add((file, text));
+                    var extractor = TextExtractorFactory.Create(file);
+                    var text = extractor.ExtractText(file);
+
+                    if (!string.IsNullOrWhiteSpace(text))
+                        docs.Add((file, text));
+                }
+                catch
+                {
+                    // swallow per file
                 }
             }
-            catch (Exception e)
-            {
-                
-            }
+
+            await _luceneIndexService.BuildOrUpdateIndexAsync(rootFolder, docs);
+
+            // vigtigt: så SearchAsync ikke re-indexer bagefter
+            _indexedRootFolder = rootFolder;
         }
-        await _luceneIndexService.BuildOrUpdateIndexAsync(rootFolder, docs);
-        _indexedRootFolder = rootFolder;
+        finally
+        {
+            _indexLock.Release();
+        }
     }
 
     public async Task<List<SearchResult>> SearchAsync(string rootFolder, string? query)
