@@ -8,16 +8,16 @@ public static class TextExtractorFactory
 {
     public static ITextExtractor Create(string filePath)
     {
-        if (string.IsNullOrEmpty(filePath)) throw new ArgumentException();
+        if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException();
 
         var extension = Path.GetExtension(filePath).ToLowerInvariant();
 
-        switch (extension)
+        return extension switch
         {
-            case ".pdf":
-                return new PdfTextExtractor();
-            default:
-                throw new NotSupportedException($"Filetype not supported: {extension}");
-        }
+            ".pdf" => new PdfTextExtractor(),
+            ".txt" => new PlainTextExtractor(),
+            _ => throw new NotSupportedException()
+
+        };
     }
 }
