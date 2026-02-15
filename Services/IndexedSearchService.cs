@@ -58,6 +58,7 @@ public class IndexedSearchService
             }
         }
         await _luceneIndexService.BuildOrUpdateIndexAsync(rootFolder, docs);
+        _indexedRootFolder = rootFolder;
     }
 
     public async Task<List<SearchResult>> SearchAsync(string rootFolder, string? query)
