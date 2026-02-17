@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using FileSearchTool.Models;
+using System.Text.RegularExpressions;
 
 namespace FileSearchTool.Services;
 
 public static class SnippetMaker
 {
     // TODO: Ny metode der returnerer flere snippets pr dokument
+    private static bool IsSingleToken(string p) => !p.Contains(' ');
     public static List<string> MakeSnippets(
         string fullText,
         string rawQuery,
@@ -78,17 +80,26 @@ public static class SnippetMaker
         
         foreach (var pattern in patterns)
         {
-            int startIndex = 0;
-
-            while (true)
+            if (IsSingleToken(pattern))
             {
-                var idx = normalizedFullText.IndexOf(pattern, startIndex, StringComparison.Ordinal);
+                var re = BuildWholeWordRegex(pattern);
+                foreach (Match m in re.Matches(normalizedFullText))
+                {
+                    hits.Add((m.Index, m.Length, pattern));
+                }
+            }
+            else
+            {
+                // Phrase: behold substring-match
+                int startIndex = 0;
+                while (true)
+                {
+                    var idx = normalizedFullText.IndexOf(pattern, startIndex, StringComparison.Ordinal);
+                    if (idx < 0) break;
 
-                if (idx < 0)
-                    break;
-
-                hits.Add((idx, pattern.Length, pattern));
-                startIndex = idx + pattern.Length;
+                    hits.Add((idx, pattern.Length, pattern));
+                    startIndex = idx + pattern.Length;
+                }
             }
         }
         
@@ -180,13 +191,19 @@ public static class SnippetMaker
             foreach (var p in patterns)
             {
                 if (string.IsNullOrWhiteSpace(p)) continue;
-
-                // Undgå at highlight tomme strings
                 var pat = p.Trim();
                 if (pat.Length == 0) continue;
 
-                // Marker med [term]
-                snippet = snippet.Replace(pat, $"[{pat}]", StringComparison.Ordinal);
+                if (IsSingleToken(pat))
+                {
+                    var re = BuildWholeWordRegex(pat);
+                    snippet = re.Replace(snippet, m => $"[{m.Value}]");
+                }
+                else
+                {
+                    // Phrase highlight (ok som substring)
+                    snippet = snippet.Replace(pat, $"[{pat}]", StringComparison.Ordinal);
+                }
             }
 
             // (Valgfrit) Undgå duplikat-snippets hvis mange clusters ender i samme window
@@ -195,7 +212,12 @@ public static class SnippetMaker
         }
         return snippets;
     }
-
+    private static Regex BuildWholeWordRegex(string token)
+    {
+        // \b virker ok her fordi du allerede lowercaser teksten og tokens er simple.
+        // Escape så specialtegn ikke ødelægger regex.
+        return new Regex(@"\b" + Regex.Escape(token) + @"\b", RegexOptions.Compiled);
+    }
 
 }
 
