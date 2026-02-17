@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Lucene.Net.Analysis;
 using Lucene.Net.Analysis.Standard;
+using Lucene.Net.Analysis.Util;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Store;
@@ -31,7 +32,7 @@ public class LuceneIndexService
     public LuceneIndexService()
     {
         _indexPaths = new LuceneIndexPaths();
-        _analyzer = new StandardAnalyzer(_version);
+        _analyzer = new StandardAnalyzer(_version, CharArraySet.EMPTY_SET);
     }
 
     public LuceneIndexService(LuceneIndexPaths indexPaths, Analyzer analyzer)

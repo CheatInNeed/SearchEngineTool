@@ -50,7 +50,7 @@ public class LuceneQueryBuilder
 
             // Keep phrase fairly strict (slop = 0)
             // Later we can allow small slop like 1-2.
-            phrase.Slop = 0;
+            phrase.Slop = 3;
 
             foreach (var t in tokens)
                 phrase.Add(new Term(FieldContent, t));

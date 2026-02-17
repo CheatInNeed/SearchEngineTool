@@ -10,6 +10,7 @@ using System.Linq;
 using FileSearchTool.Models;
 using FileSearchTool.Services.TextExtraction;
 using System.Threading;
+using Lucene.Net.Analysis.Util;
 
 namespace FileSearchTool.Services;
 
@@ -19,7 +20,8 @@ public class IndexedSearchService
 
     // Delte Lucene dependencies (samme analyzer bruges begge steder!)
     private readonly LuceneIndexPaths _indexPaths = new LuceneIndexPaths();
-    private readonly Analyzer _analyzer = new StandardAnalyzer(LuceneVersion.LUCENE_48);
+    private readonly Analyzer _analyzer =
+        new StandardAnalyzer(LuceneVersion.LUCENE_48, CharArraySet.EMPTY_SET);
 
     private readonly LuceneIndexService _luceneIndexService;
     private readonly LuceneSearchService _luceneSearchService;
