@@ -5,6 +5,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using FileSearchTool.Services;
 using Avalonia.Input;
+using System;
+using System.IO;
+using Avalonia.Interactivity;
+using FileSearchTool.ViewModels;
 
 namespace FileSearchTool;
 
@@ -45,6 +49,31 @@ public partial class MainWindow : Window
                 vm.SearchCommand.Execute(null);
 
             e.Handled = true;
+        }
+    }
+    
+    private void Results_DoubleTapped(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+        if (vm.SelectedResult == null) return;
+
+        var path = vm.SelectedResult.FilePath;
+        if (!string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var query = vm.Query ?? "";
+        try
+        {
+            var previewVm = new PdfPreviewViewModel(path, query, startAtHit: vm.SelectedResult.HitNumber - 1);
+            var win = new PdfPreviewWindow { DataContext = previewVm };
+            win.Show();
+        }
+        catch (Exception ex)
+        {
+            // Minimal: log til console
+            Console.WriteLine(ex);
+
+            // Hvis du har en status-tekst i UI, kan du også vise den der.
         }
     }
 }

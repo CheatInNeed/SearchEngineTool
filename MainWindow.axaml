@@ -47,7 +47,8 @@
 
         <!-- Results -->
         <ListBox ItemsSource="{Binding Results}"
-                 SelectedItem="{Binding SelectedResult}">
+                 SelectedItem="{Binding SelectedResult}"
+                 DoubleTapped="Results_DoubleTapped">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <StackPanel Spacing="2">
