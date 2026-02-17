@@ -13,17 +13,32 @@
             <Button Content="▶" Command="{Binding NextHitCommand}" />
             <TextBlock Text="{Binding HitStatus}" VerticalAlignment="Center"/>
             <TextBlock Text="{Binding FileName}" VerticalAlignment="Center" Opacity="0.7" Margin="12,0,0,0"/>
+            
+            <Button Content="-" Command="{Binding ZoomOutCommand}" />
+            <Button Content="+" Command="{Binding ZoomInCommand}" />
+            <Button Content="Reset" Command="{Binding ZoomResetCommand}" />
+
+            <Slider Width="200"
+                    Minimum="0.3"
+                    Maximum="3.0"
+                    Value="{Binding Zoom, Mode=TwoWay}" />
+            <TextBlock Text="{Binding Zoom}" VerticalAlignment="Center" Opacity="0.7"/>
         </StackPanel>
 
         <ScrollViewer>
             <Grid>
-                <Image Source="{Binding PageBitmap}" Stretch="None"/>
+                <!-- PDF-billedet (kun én gang) -->
+                <Image Source="{Binding PageBitmap}"
+                       Stretch="None"
+                       Width="{Binding PagePixelWidth}"
+                       Height="{Binding PagePixelHeight}" />
 
-                <!-- Overlay (tegnes i code via custom control er bedst, men her bruger vi Canvas) -->
+                <!-- Overlay ovenpå -->
                 <Canvas x:Name="OverlayCanvas"
+                        Canvas.ZIndex="10"
                         IsHitTestVisible="False"
                         Width="{Binding PagePixelWidth}"
-                        Height="{Binding PagePixelHeight}"/>
+                        Height="{Binding PagePixelHeight}" />
             </Grid>
         </ScrollViewer>
 

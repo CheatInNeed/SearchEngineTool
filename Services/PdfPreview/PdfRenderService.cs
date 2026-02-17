@@ -27,7 +27,7 @@ public static class PdfRenderService
             var options = new RenderOptions
             {
                 // 72 DPI er standard PDF
-                Dpi = (int)(72 * scale)   // scale = 1.0f, 0.8f, 1.5f osv.
+                Dpi = (int)Math.Round(72 * scale)   // scale = 1.0f, 0.8f, 1.5f osv.
             };
 
             using SKBitmap skBmp = Conversion.ToImage(pdfBytes, pageIndex, null, options);

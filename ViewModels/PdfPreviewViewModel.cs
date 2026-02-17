@@ -21,6 +21,8 @@ public partial class PdfPreviewViewModel : ObservableObject
 
     [ObservableProperty] private Bitmap? pageBitmap;
     [ObservableProperty] private int currentPage = 1;
+    
+    [ObservableProperty] private float zoom = 0.8f;
 
     // Pixel-størrelse (til overlay canvas)
     [ObservableProperty] private double pagePixelWidth;
@@ -32,6 +34,23 @@ public partial class PdfPreviewViewModel : ObservableObject
 
     [ObservableProperty] private int currentHitIndex = 0;
 
+    [RelayCommand]
+    private void ZoomIn()
+    {
+        Zoom = MathF.Min(3.0f, Zoom * 1.15f);
+    }
+
+    [RelayCommand]
+    private void ZoomOut()
+    {
+        Zoom = MathF.Max(0.3f, Zoom / 1.15f);
+    }
+
+    [RelayCommand]
+    private void ZoomReset()
+    {
+        Zoom = 0.8f;
+    }
     public string FileName => Path.GetFileName(_pdfPath);
 
     public string HitStatus =>
@@ -89,9 +108,8 @@ public partial class PdfPreviewViewModel : ObservableObject
 
     private void Render()
     {
-        // Render med fast scale (2.0) – kan senere gøres zoom
-        var (bmp, pxW, pxH) =
-            PdfRenderService.RenderPage(_pdfPath, CurrentPage, scale: 0.8f);
+        var (bmp, pxW, pxH) = PdfRenderService.RenderPage(_pdfPath, CurrentPage, Zoom);
+
         PageBitmap = bmp;
         PagePixelWidth = pxW;
         PagePixelHeight = pxH;
@@ -102,6 +120,7 @@ public partial class PdfPreviewViewModel : ObservableObject
         _pagePdfHeight = page.Height;
 
         UpdateOverlay();
+
         OnPropertyChanged(nameof(HitStatus));
     }
 
@@ -137,5 +156,14 @@ public partial class PdfPreviewViewModel : ObservableObject
 
         CurrentPageHitRectsPixels = rects;
         OverlayChanged?.Invoke(this, EventArgs.Empty);
+    }
+    
+    partial void OnZoomChanged(float value)
+    {
+        // clamp så man ikke kan zoome til 0 eller alt for meget
+        if (value < 0.3f) Zoom = 0.3f;
+        if (value > 3.0f) Zoom = 3.0f;
+
+        Render();
     }
 }

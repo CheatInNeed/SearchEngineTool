@@ -84,5 +84,31 @@ public partial class PdfPreviewWindow : Window
             vm.NextHitCommand.Execute(null);
             e.Handled = true;
         }
+        
+        var mods = e.KeyModifiers;
+
+        if (mods.HasFlag(Avalonia.Input.KeyModifiers.Meta)) // Meta = Cmd på mac
+        {
+            if (e.Key == Avalonia.Input.Key.OemPlus || e.Key == Avalonia.Input.Key.Add)
+            {
+                vm.ZoomInCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Avalonia.Input.Key.OemMinus || e.Key == Avalonia.Input.Key.Subtract)
+            {
+                vm.ZoomOutCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Avalonia.Input.Key.D0 || e.Key == Avalonia.Input.Key.NumPad0)
+            {
+                vm.ZoomResetCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
+        }
     }
 }
