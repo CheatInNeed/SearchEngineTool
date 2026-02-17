@@ -84,6 +84,16 @@ public partial class PdfPreviewWindow : Window
             vm.NextHitCommand.Execute(null);
             e.Handled = true;
         }
+        else if (e.Key == Avalonia.Input.Key.PageDown || e.Key == Avalonia.Input.Key.Down)
+        {
+            vm.NextPageCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Avalonia.Input.Key.PageUp || e.Key == Avalonia.Input.Key.Up)
+        {
+            vm.PrevPageCommand.Execute(null);
+            e.Handled = true;
+        }
         
         var mods = e.KeyModifiers;
 
