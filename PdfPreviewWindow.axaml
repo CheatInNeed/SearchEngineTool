@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:FileSearchTool.ViewModels"
+        x:Class="FileSearchTool.PdfPreviewWindow"
+        x:DataType="vm:PdfPreviewViewModel"
+        Width="1000" Height="800"
+        Title="PDF Preview">
+
+    <DockPanel Margin="12">
+
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8">
+            <Button Content="◀" Command="{Binding PrevHitCommand}" />
+            <Button Content="▶" Command="{Binding NextHitCommand}" />
+            <TextBlock Text="{Binding HitStatus}" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding FileName}" VerticalAlignment="Center" Opacity="0.7" Margin="12,0,0,0"/>
+        </StackPanel>
+
+        <ScrollViewer>
+            <Grid>
+                <Image Source="{Binding PageBitmap}" Stretch="None"/>
+
+                <!-- Overlay (tegnes i code via custom control er bedst, men her bruger vi Canvas) -->
+                <Canvas x:Name="OverlayCanvas"
+                        IsHitTestVisible="False"
+                        Width="{Binding PagePixelWidth}"
+                        Height="{Binding PagePixelHeight}"/>
+            </Grid>
+        </ScrollViewer>
+
+    </DockPanel>
+</Window>
