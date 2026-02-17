@@ -34,35 +34,30 @@
 
       <TextBlock Text="{Binding Status}" />
     </StackPanel>
-
-    <!-- Recent folders popup -->
-    <Popup IsOpen="{Binding IsRecentFoldersOpen}"
-           PlacementMode="Bottom"
-           HorizontalOffset="0"
-           VerticalOffset="8">
-      <Border Background="{DynamicResource ThemeBackgroundBrush}"
-              BorderBrush="{DynamicResource ThemeBorderMidBrush}"
-              BorderThickness="1"
-              Padding="12"
-              Width="360">
-        <StackPanel Spacing="8">
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBlock Text="Seneste mapper" FontWeight="Bold"/>
-            <Button Content="✕" Command="{Binding ToggleRecentFoldersCommand}"/>
-          </StackPanel>
-
-          <ListBox ItemsSource="{Binding RecentFolders}"
-                   SelectedItem="{Binding SelectedRecentFolder}">
-            <ListBox.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding Name}" TextWrapping="Wrap"/>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
+    
+    <Border IsVisible="{Binding IsRecentFoldersOpen}"
+            Margin="0,8,0,8"
+            Padding="12"
+            BorderThickness="1"
+            BorderBrush="{DynamicResource ThemeBorderMidBrush}">
+      <StackPanel Spacing="8">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="Seneste mapper" FontWeight="Bold"/>
+          <Button Content="Skjul"
+                  Command="{Binding ToggleRecentFoldersCommand}"/>
         </StackPanel>
-      </Border>
-    </Popup>
 
+        <ListBox ItemsSource="{Binding RecentFolders}"
+                 SelectedItem="{Binding SelectedRecentFolder}">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Name}" TextWrapping="Wrap"/>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </StackPanel>
+    </Border>
+    
     <!-- Results as burger pane -->
     <SplitView IsPaneOpen="{Binding IsResultsPaneOpen}"
                OpenPaneLength="420"
@@ -91,11 +86,93 @@
       </SplitView.Pane>
 
       <SplitView.Content>
-        <!-- Tomt content for nu (eller “vælg et resultat”) -->
-        <Border Padding="16">
-          <TextBlock Text="Dobbeltklik et PDF-resultat for preview." Opacity="0.7"/>
+  <Grid Margin="12,0,0,0">
+
+    <!-- Placeholder når der ikke er preview -->
+    <Border IsVisible="{Binding HasNoPreview}"
+            Padding="16"
+            BorderThickness="1"
+            BorderBrush="{DynamicResource ThemeBorderMidBrush}">
+      <TextBlock Text="Søg, og vælg et PDF-resultat for preview."
+                 Opacity="0.7"/>
+    </Border>
+
+    <!-- Preview når der ER preview -->
+    <Grid IsVisible="{Binding HasPreview}"
+          RowDefinitions="Auto,*">
+
+      <!-- Preview toolbar -->
+      <Border Padding="8"
+              BorderThickness="1"
+              BorderBrush="{DynamicResource ThemeBorderMidBrush}">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
+          <Button Content="◀ Hit" Grid.Column="0"
+                  Command="{Binding CurrentPreview.PrevHitCommand}"/>
+          <Button Content="Hit ▶" Grid.Column="1"
+                  Command="{Binding CurrentPreview.NextHitCommand}"/>
+
+          <Button Content="◀ Side" Grid.Column="2"
+                  Command="{Binding CurrentPreview.PrevPageCommand}"/>
+          <Button Content="Side ▶" Grid.Column="3"
+                  Command="{Binding CurrentPreview.NextPageCommand}"/>
+
+          <Button Content="-" Grid.Column="4"
+                  Command="{Binding CurrentPreview.ZoomOutCommand}"/>
+          <Button Content="+" Grid.Column="5"
+                  Command="{Binding CurrentPreview.ZoomInCommand}"/>
+
+          <TextBlock Grid.Column="7"
+                     VerticalAlignment="Center"
+                     Text="{Binding CurrentPreview.HitStatus}"/>
+          <TextBlock Grid.Column="8"
+                     VerticalAlignment="Center"
+                     Margin="12,0,0,0"
+                     Text="{Binding CurrentPreview.PageStatus}"/>
+        </Grid>
+      </Border>
+
+      <!-- Preview content -->
+      <Grid Grid.Row="1" ColumnDefinitions="260,*" Margin="0,12,0,0">
+
+        <Border Grid.Column="0" Padding="8"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource ThemeBorderMidBrush}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Hits" FontWeight="Bold"/>
+            <ListBox ItemsSource="{Binding CurrentPreview.SidebarItems}"
+                     SelectedItem="{Binding CurrentPreview.SelectedSidebarItem}">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </StackPanel>
         </Border>
-      </SplitView.Content>
+
+        <Border Grid.Column="1" Padding="8"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource ThemeBorderMidBrush}">
+          <Viewbox Stretch="Uniform">
+            <Grid>
+              <Image Source="{Binding CurrentPreview.PageBitmap}"
+                     Stretch="None"
+                     Width="{Binding CurrentPreview.PagePixelWidth}"
+                     Height="{Binding CurrentPreview.PagePixelHeight}" />
+              <Canvas x:Name="MainOverlayCanvas"
+                      Canvas.ZIndex="10"
+                      IsHitTestVisible="False"
+                      Width="{Binding CurrentPreview.PagePixelWidth}"
+                      Height="{Binding CurrentPreview.PagePixelHeight}" />
+            </Grid>
+          </Viewbox>
+        </Border>
+
+      </Grid>
+    </Grid>
+
+  </Grid>
+</SplitView.Content>
 
     </SplitView>
 

@@ -14,10 +14,28 @@ namespace FileSearchTool;
 
 public partial class MainWindow : Window
 {
+    
+    private Canvas? _mainOverlay;
+    private PdfPreviewViewModel? _hookedPreview;
+    
     public MainWindow()
     {
         InitializeComponent();
+
         DataContext = new MainWindowViewModel();
+
+        _mainOverlay = this.FindControl<Canvas>("MainOverlayCanvas");
+
+        if (DataContext is MainWindowViewModel vm)
+        {
+            vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainWindowViewModel.CurrentPreview))
+                    HookPreview(vm.CurrentPreview);
+            };
+
+            HookPreview(vm.CurrentPreview);
+        }
     }
 
     private async void PickFolder_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -55,25 +73,46 @@ public partial class MainWindow : Window
     private void Results_DoubleTapped(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;
-        if (vm.SelectedResult == null) return;
 
-        var path = vm.SelectedResult.FilePath;
-        if (!string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
-            return;
+        if (vm.OpenSelectedPreviewCommand.CanExecute(null))
+            vm.OpenSelectedPreviewCommand.Execute(null);
+    }
+    
+    private void HookPreview(PdfPreviewViewModel? preview)
+    {
+        if (_hookedPreview != null)
+            _hookedPreview.OverlayChanged -= PreviewOnOverlayChanged;
 
-        var query = vm.Query ?? "";
-        try
+        _hookedPreview = preview;
+
+        if (_hookedPreview != null)
+            _hookedPreview.OverlayChanged += PreviewOnOverlayChanged;
+
+        RedrawMainOverlay();
+    }
+
+    private void PreviewOnOverlayChanged(object? sender, EventArgs e) => RedrawMainOverlay();
+
+    private void RedrawMainOverlay()
+    {
+        if (_mainOverlay == null) return;
+        _mainOverlay.Children.Clear();
+
+        if (_hookedPreview == null) return;
+
+        foreach (var r in _hookedPreview.CurrentPageHitRectsPixels)
         {
-            var previewVm = new PdfPreviewViewModel(path, query, startAtHit: vm.SelectedResult.HitNumber - 1);
-            var win = new PdfPreviewWindow { DataContext = previewVm };
-            win.Show();
-        }
-        catch (Exception ex)
-        {
-            // Minimal: log til console
-            Console.WriteLine(ex);
+            var rect = new Avalonia.Controls.Shapes.Rectangle
+            {
+                Width = r.Width,
+                Height = r.Height,
+                Fill = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromArgb(120, 255, 255, 0)),
+                StrokeThickness = 0
+            };
 
-            // Hvis du har en status-tekst i UI, kan du også vise den der.
+            Canvas.SetLeft(rect, r.X);
+            Canvas.SetTop(rect, r.Y);
+            _mainOverlay.Children.Add(rect);
         }
     }
 }
