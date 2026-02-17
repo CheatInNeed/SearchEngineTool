@@ -15,6 +15,7 @@ public class LuceneIndexService
 {
     private const string FieldPath = "path";
     private const string FieldContent = "content";
+    private const string FieldContentStored = "contentStored";
     private const string FieldFilename = "filename";
     private const string FieldExt = "ext";
     private const string FieldLastModifiedTicks = "lastModifiedTicks";
@@ -118,7 +119,8 @@ public class LuceneIndexService
                     var doc = new Document
                     {
                         new StringField(FieldPath, path, Field.Store.YES),
-                        new TextField(FieldContent, content, Field.Store.YES),
+                        new TextField(FieldContent, NormalizeForIndex(content), Field.Store.NO),
+                        new StoredField(FieldContentStored, content),
                         new TextField(FieldFilename, fileName, Field.Store.YES),
                         new StringField(FieldExt, ext, Field.Store.YES),
 
@@ -180,5 +182,14 @@ public class LuceneIndexService
         }
 
         return map;
+    }
+    
+    private static string NormalizeForIndex(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return "";
+        // Alt der ikke er bogstav eller ciffer => mellemrum
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"[^\p{L}\p{Nd}]+", " ");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").Trim();
+        return s;
     }
 }

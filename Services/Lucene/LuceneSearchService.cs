@@ -12,7 +12,8 @@ namespace FileSearchTool.Services.Lucene;
 public class LuceneSearchService
 {
     private const string FieldPath = "path";
-    private const string FieldContent = "content";
+    private const string FieldContent = "content"; // indexed (normaliseret)
+    private const string FieldContentStored = "contentStored"; // original til snippets
 
     private readonly LuceneIndexPaths _indexPaths;
     private readonly LuceneQueryBuilder _queryBuilder;
@@ -72,7 +73,7 @@ public class LuceneSearchService
                     continue;
 
                 // storedContent is only available if you indexed Field.Store.YES on "content"
-                var content = doc.Get(FieldContent);
+                var content = doc.Get(FieldContentStored);
 
                 results.Add((path, sd.Score, content));
             }

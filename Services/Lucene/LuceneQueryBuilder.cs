@@ -35,7 +35,7 @@ public class LuceneQueryBuilder
             return new BooleanQuery();
 
         var normalized = NormalizeWhitespace(rawQuery);
-
+        normalized = NormalizeForQuery(normalized);
         var tokens = AnalyzeToTerms(FieldContent, normalized);
 
         if (tokens.Count == 0)
@@ -55,7 +55,7 @@ public class LuceneQueryBuilder
             foreach (var t in tokens)
                 phrase.Add(new Term(FieldContent, t));
 
-            phrase.Boost = 4.0f;
+            phrase.Boost = 12.0f;
             root.Add(phrase, Occur.SHOULD);
         }
 
@@ -76,6 +76,15 @@ public class LuceneQueryBuilder
             // Example: 4-5 tokens => require 2; 6+ tokens => require 3
             tokenBool.MinimumNumberShouldMatch = tokens.Count >= 6 ? 3 : 2;
         }
+        
+        // C) AND-query: kræv at ALLE tokens findes (men stadig som SHOULD i root)
+        var mustAll = new BooleanQuery();
+        foreach (var t in tokens.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            mustAll.Add(new TermQuery(new Term(FieldContent, t)), Occur.MUST);
+        }
+        mustAll.Boost = 6.0f;
+        root.Add(mustAll, Occur.SHOULD);
 
         root.Add(tokenBool, Occur.SHOULD);
 
@@ -109,6 +118,14 @@ public class LuceneQueryBuilder
     {
         s = s.Trim();
         s = Regex.Replace(s, @"\s+", " ");
+        return s;
+    }
+    
+    private static string NormalizeForQuery(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return "";
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"[^\p{L}\p{Nd}]+", " ");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").Trim();
         return s;
     }
 }
