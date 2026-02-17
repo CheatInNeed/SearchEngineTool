@@ -73,19 +73,43 @@ public static class PdfHitFinder
                         var phraseWords = flat.Skip(i).Take(qTokens.Count).Select(x => x.word).Distinct().ToList();
                         var rects = phraseWords.Select(w => ToAvaloniaRect(w.BoundingBox)).ToArray();
 
-                        hits.Add(new PdfHit(++hitIndex, page.Number, rects));
+                        hits.Add(new PdfHit(++hitIndex, page.Number, rects, Score: 3.0f, MatchedToken: string.Join(" ", qTokens)));
+
+
                     }
                 }
             }
 
-            // B) Token hits (enkeltord)
-            // (vi laver ét hit pr token-forekomst, så navigation føles “som cmd+f”)
-            var tokenSet = qTokens.Distinct().ToHashSet(StringComparer.Ordinal);
+            // B) Token hits (enkeltord) med exact + infix
+            var distinctQueryTokens = qTokens.Distinct(StringComparer.Ordinal).ToList();
+
             foreach (var (token, word) in flat)
             {
-                if (!tokenSet.Contains(token)) continue;
-                hits.Add(new PdfHit(++hitIndex, page.Number, new[] { ToAvaloniaRect(word.BoundingBox) }));
+                foreach (var q in distinctQueryTokens)
+                {
+                    if (q.Length == 0) continue;
+
+                    // Exact match: høj score
+                    if (string.Equals(token, q, StringComparison.Ordinal))
+                    {
+                        hits.Add(new PdfHit(++hitIndex, page.Number,
+                            new[] { ToAvaloniaRect(word.BoundingBox) },
+                            Score: 2.0f,
+                            MatchedToken: q));
+                        continue;
+                    }
+
+                    // Infix match: token indeholder query (fx bitcoin indeholder itcoi)
+                    if (q.Length >= 3 && token.Contains(q, StringComparison.Ordinal))
+                    {
+                        hits.Add(new PdfHit(++hitIndex, page.Number,
+                            new[] { ToAvaloniaRect(word.BoundingBox) },
+                            Score: 1.0f,
+                            MatchedToken: q));
+                    }
+                }
             }
+
         }
 
         return hits;

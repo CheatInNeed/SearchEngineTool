@@ -6,58 +6,98 @@
         x:DataType="vm:MainWindowViewModel"
         Title="SearchEngineTool" Width="1400" Height="600">
 
-    <DockPanel Margin="12" LastChildFill="True">
+    <DockPanel Margin="12">
 
-        <!-- Left: Recent folders -->
-        <Border DockPanel.Dock="Left" Width="280" Margin="0,0,12,0">
-            <StackPanel Spacing="8">
-                <TextBlock Text="Seneste mapper" FontWeight="Bold"/>
+    <!-- Top panel (behold jeres mappe+query controls) -->
+    <StackPanel DockPanel.Dock="Top" Spacing="8">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="☰"
+                Command="{Binding ToggleResultsPaneCommand}"/>
+        
+        <Button Content="Seneste mapper"
+                Command="{Binding ToggleRecentFoldersCommand}"/>
 
-                <ListBox ItemsSource="{Binding RecentFolders}"
-                         SelectedItem="{Binding SelectedRecentFolder}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Name}" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </StackPanel>
-        </Border>
+        <TextBlock Text="Mappe:" VerticalAlignment="Center"/>
+        <TextBox Width="520" Text="{Binding SelectedFolder}"/>
+        <Button Content="Vælg..." Click="PickFolder_Click"/>
+      </StackPanel>
 
-        <!-- Top panel -->
-        <StackPanel DockPanel.Dock="Top" Spacing="8">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="Mappe:" VerticalAlignment="Center"/>
-                <TextBox Width="600" Text="{Binding SelectedFolder}"/>
-                <Button Content="Vælg..." Click="PickFolder_Click"/>
-            </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="Query:" VerticalAlignment="Center"/>
+        <TextBox Width="600"
+                 Text="{Binding Query}"
+                 KeyDown="QueryBox_KeyDown"/>
+        <Button Content="Search"
+                Command="{Binding SearchCommand}"
+                IsDefault="True"/>
+      </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="Query:" VerticalAlignment="Center"/>
-                <TextBox Width="600"
-                         Text="{Binding Query}"
-                         KeyDown="QueryBox_KeyDown"/>
-                <Button Content="Search"
-                        Command="{Binding SearchCommand}"
-                        IsDefault="True"/>
-            </StackPanel>
+      <TextBlock Text="{Binding Status}" />
+    </StackPanel>
 
-            <TextBlock Text="{Binding Status}" />
-        </StackPanel>
+    <!-- Recent folders popup -->
+    <Popup IsOpen="{Binding IsRecentFoldersOpen}"
+           PlacementMode="Bottom"
+           HorizontalOffset="0"
+           VerticalOffset="8">
+      <Border Background="{DynamicResource ThemeBackgroundBrush}"
+              BorderBrush="{DynamicResource ThemeBorderMidBrush}"
+              BorderThickness="1"
+              Padding="12"
+              Width="360">
+        <StackPanel Spacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Seneste mapper" FontWeight="Bold"/>
+            <Button Content="✕" Command="{Binding ToggleRecentFoldersCommand}"/>
+          </StackPanel>
 
-        <!-- Results -->
-        <ListBox ItemsSource="{Binding Results}"
-                 SelectedItem="{Binding SelectedResult}"
-                 DoubleTapped="Results_DoubleTapped">
+          <ListBox ItemsSource="{Binding RecentFolders}"
+                   SelectedItem="{Binding SelectedRecentFolder}">
             <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Spacing="2">
-                        <TextBlock Text="{Binding FileName}" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding Snippet}" Opacity="0.8" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </DataTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Name}" TextWrapping="Wrap"/>
+              </DataTemplate>
             </ListBox.ItemTemplate>
-        </ListBox>
+          </ListBox>
+        </StackPanel>
+      </Border>
+    </Popup>
 
-    </DockPanel>
+    <!-- Results as burger pane -->
+    <SplitView IsPaneOpen="{Binding IsResultsPaneOpen}"
+               OpenPaneLength="420"
+               CompactPaneLength="0"
+               DisplayMode="Inline">
+
+      <SplitView.Pane>
+        <Border Padding="8" BorderThickness="1"
+                BorderBrush="{DynamicResource ThemeBorderMidBrush}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Resultater" FontWeight="Bold"/>
+            <ListBox ItemsSource="{Binding Results}"
+                     SelectedItem="{Binding SelectedResult}"
+                     DoubleTapped="Results_DoubleTapped">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding FileName}" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Snippet}" Opacity="0.8" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </StackPanel>
+        </Border>
+      </SplitView.Pane>
+
+      <SplitView.Content>
+        <!-- Tomt content for nu (eller “vælg et resultat”) -->
+        <Border Padding="16">
+          <TextBlock Text="Dobbeltklik et PDF-resultat for preview." Opacity="0.7"/>
+        </Border>
+      </SplitView.Content>
+
+    </SplitView>
+
+  </DockPanel>
 </Window>

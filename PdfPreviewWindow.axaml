@@ -8,41 +8,46 @@
 
     <DockPanel Margin="12">
 
+        <!-- Top toolbar (som før) -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8">
-            <Button Content="◀" Command="{Binding PrevHitCommand}" />
-            <Button Content="▶" Command="{Binding NextHitCommand}" />
-            <TextBlock Text="{Binding HitStatus}" VerticalAlignment="Center"/>
-            <TextBlock Text="{Binding FileName}" VerticalAlignment="Center" Opacity="0.7" Margin="12,0,0,0"/>
-            <Button Content="⏮" Command="{Binding PrevPageCommand}" />
-            <Button Content="⏭" Command="{Binding NextPageCommand}" />
-            <TextBlock Text="{Binding PageStatus}" VerticalAlignment="Center" Opacity="0.7"/>
-            <Button Content="-" Command="{Binding ZoomOutCommand}" />
-            <Button Content="+" Command="{Binding ZoomInCommand}" />
-            <Button Content="Reset" Command="{Binding ZoomResetCommand}" />
-
-            <Slider Width="200"
-                    Minimum="0.3"
-                    Maximum="3.0"
-                    Value="{Binding Zoom, Mode=TwoWay}" />
-            <TextBlock Text="{Binding Zoom}" VerticalAlignment="Center" Opacity="0.7"/>
+            <!-- ... behold jeres knapper uændret ... -->
         </StackPanel>
 
-        <ScrollViewer>
-            <Grid>
-                <!-- PDF-billedet (kun én gang) -->
-                <Image Source="{Binding PageBitmap}"
-                       Stretch="None"
-                       Width="{Binding PagePixelWidth}"
-                       Height="{Binding PagePixelHeight}" />
+        <!-- Content: sidebar + preview -->
+        <Grid ColumnDefinitions="260,*" RowDefinitions="*">
+    
+            <!-- Sidebar -->
+            <Border Grid.Column="0" Margin="0,0,12,0">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Hits" FontWeight="Bold"/>
+                    <ListBox ItemsSource="{Binding SidebarItems}"
+                             SelectedItem="{Binding SelectedSidebarItem}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </Border>
 
-                <!-- Overlay ovenpå -->
-                <Canvas x:Name="OverlayCanvas"
-                        Canvas.ZIndex="10"
-                        IsHitTestVisible="False"
-                        Width="{Binding PagePixelWidth}"
-                        Height="{Binding PagePixelHeight}" />
-            </Grid>
-        </ScrollViewer>
+            <!-- PDF view -->
+            <ScrollViewer Grid.Column="1">
+                <Grid>
+                    <Image Source="{Binding PageBitmap}"
+                           Stretch="None"
+                           Width="{Binding PagePixelWidth}"
+                           Height="{Binding PagePixelHeight}" />
 
+                    <Canvas x:Name="OverlayCanvas"
+                            Canvas.ZIndex="10"
+                            IsHitTestVisible="False"
+                            Width="{Binding PagePixelWidth}"
+                            Height="{Binding PagePixelHeight}" />
+                </Grid>
+            </ScrollViewer>
+
+        </Grid>
     </DockPanel>
+
 </Window>

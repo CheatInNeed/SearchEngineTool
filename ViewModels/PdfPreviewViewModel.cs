@@ -9,12 +9,14 @@ using CommunityToolkit.Mvvm.Input;
 using FileSearchTool.Models;
 using FileSearchTool.Services.PdfPreview;
 using UglyToad.PdfPig;
+using System.Collections.ObjectModel;
 
 namespace FileSearchTool.ViewModels;
 
 public partial class PdfPreviewViewModel : ObservableObject
 {
     public event EventHandler? OverlayChanged;
+    public ObservableCollection<PdfSidebarItem> SidebarItems { get; } = new();
 
     private readonly string _pdfPath;
     private readonly List<PdfHit> _hits;
@@ -23,6 +25,8 @@ public partial class PdfPreviewViewModel : ObservableObject
 
     [ObservableProperty] private Bitmap? pageBitmap;
     [ObservableProperty] private int currentPage = 1;
+    
+    [ObservableProperty] private PdfSidebarItem? selectedSidebarItem;
     
     [ObservableProperty] private float zoom = 1.8f;
 
@@ -109,6 +113,8 @@ public partial class PdfPreviewViewModel : ObservableObject
             }
             list.Add(i);
         }
+        
+        BuildSidebarItemsDistinctPages();
 
         if (_hits.Count == 0)
         {
@@ -139,7 +145,7 @@ public partial class PdfPreviewViewModel : ObservableObject
         JumpToHit();
     }
 
-    private void JumpToHit()
+    public void JumpToHit()
     {
         if (_hits.Count == 0) return;
 
@@ -233,6 +239,42 @@ public partial class PdfPreviewViewModel : ObservableObject
         UpdateOverlay();
         OnPropertyChanged(nameof(HitStatus));
         OnPropertyChanged(nameof(PageStatus));
+    }
+    
+    partial void OnSelectedSidebarItemChanged(PdfSidebarItem? value)
+    {
+        if (value == null) return;
+        CurrentHitIndex = Math.Clamp(value.HitListIndex, 0, _hits.Count - 1);
+        JumpToHit();
+    }
+    
+    private void BuildSidebarItemsDistinctPages()
+    {
+        SidebarItems.Clear();
+        if (_hits.Count == 0) return;
+
+        // "Kun hits der differenterer sig meget":
+        // Her tolker jeg det som: vis kun 1 entry pr side (første/beste hit på siden)
+        // = mindre støj, men du kan stadig Next/Prev gennem ALLE hits.
+        var bestPerPage = _hits
+            .Select((h, idx) => (hit: h, idx))
+            .GroupBy(x => x.hit.PageNumber)
+            .Select(g =>
+            {
+                // vælg højeste score på siden; hvis tie, første forekomst
+                var best = g.OrderByDescending(x => x.hit.Score).ThenBy(x => x.idx).First();
+                return best;
+            })
+            .OrderBy(x => x.hit.PageNumber)
+            .ToList();
+
+        foreach (var x in bestPerPage)
+        {
+            var title = $"Side {x.hit.PageNumber}  ·  {x.hit.MatchedToken}";
+            SidebarItems.Add(new PdfSidebarItem(title, x.idx, x.hit.PageNumber, x.hit.Score));
+        }
+
+        SelectedSidebarItem = SidebarItems.FirstOrDefault(s => s.PageNumber == CurrentPage) ?? SidebarItems.FirstOrDefault();
     }
 
 }

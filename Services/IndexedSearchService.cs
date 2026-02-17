@@ -11,6 +11,7 @@ using FileSearchTool.Models;
 using FileSearchTool.Services.TextExtraction;
 using System.Threading;
 using Lucene.Net.Analysis.Util;
+using Lucene.Net.Analysis.Miscellaneous;
 
 namespace FileSearchTool.Services;
 
@@ -20,8 +21,7 @@ public class IndexedSearchService
 
     // Delte Lucene dependencies (samme analyzer bruges begge steder!)
     private readonly LuceneIndexPaths _indexPaths = new LuceneIndexPaths();
-    private readonly Analyzer _analyzer =
-        new StandardAnalyzer(LuceneVersion.LUCENE_48, CharArraySet.EMPTY_SET);
+    private readonly Analyzer _analyzer;
 
     private readonly LuceneIndexService _luceneIndexService;
     private readonly LuceneSearchService _luceneSearchService;
@@ -30,6 +30,17 @@ public class IndexedSearchService
 
     public IndexedSearchService()
     {
+        // Default analyzer (normal)
+        var standard = new StandardAnalyzer(LuceneVersion.LUCENE_48, CharArraySet.EMPTY_SET);
+
+        // Infix analyzer ONLY for "contentInfix"
+        var perField = new Dictionary<string, Analyzer>
+        {
+            { "contentInfix", new FileSearchTool.Services.Lucene.InfixNGramAnalyzer(LuceneVersion.LUCENE_48, 3, 15) }
+        };
+
+        _analyzer = new PerFieldAnalyzerWrapper(standard, perField);
+
         _luceneIndexService = new LuceneIndexService(_indexPaths, _analyzer);
         _luceneSearchService = new LuceneSearchService(_indexPaths, _analyzer);
     }

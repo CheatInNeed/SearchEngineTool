@@ -20,6 +20,7 @@ public class LuceneIndexService
     private const string FieldFilename = "filename";
     private const string FieldExt = "ext";
     private const string FieldLastModifiedTicks = "lastModifiedTicks";
+    private const string FieldContentInfix = "contentInfix";
 
     private readonly LuceneIndexPaths _indexPaths;
     private readonly Analyzer _analyzer;
@@ -121,11 +122,13 @@ public class LuceneIndexService
                     {
                         new StringField(FieldPath, path, Field.Store.YES),
                         new TextField(FieldContent, NormalizeForIndex(content), Field.Store.NO),
+
+                        // NEW: infix index
+                        new TextField(FieldContentInfix, NormalizeForIndex(content), Field.Store.NO),
+
                         new StoredField(FieldContentStored, content),
                         new TextField(FieldFilename, fileName, Field.Store.YES),
                         new StringField(FieldExt, ext, Field.Store.YES),
-
-                        // Stored metadata for incremental updates
                         new StoredField(FieldLastModifiedTicks, currentTicks)
                     };
 

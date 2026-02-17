@@ -14,6 +14,7 @@ namespace FileSearchTool.Services.Lucene;
 public class LuceneQueryBuilder
 {
     private const string FieldContent = "content";
+    private const string FieldContentInfix = "contentInfix";
 
     private readonly Analyzer _analyzer;
     private readonly LuceneVersion _version = LuceneVersion.LUCENE_48;
@@ -85,6 +86,30 @@ public class LuceneQueryBuilder
         }
         mustAll.Boost = 6.0f;
         root.Add(mustAll, Occur.SHOULD);
+        
+        // D) Infix token queries (mid-word). Only for tokens length >= 3
+        var infixBool = new BooleanQuery();
+        foreach (var t in tokens.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (t.Length < 3) continue;
+
+            // TermQuery against the ngram-indexed field
+            var tq = new TermQuery(new Term(FieldContentInfix, t))
+            {
+                Boost = 2.5f
+            };
+            infixBool.Add(tq, Occur.SHOULD);
+        }
+
+        // If we have any infix clauses, add them (lower than phrase, higher than loose tokens)
+        if (infixBool.Clauses.Count > 0)
+        {
+            // Mild minimum match to reduce noise
+            if (tokens.Count >= 4)
+                infixBool.MinimumNumberShouldMatch = tokens.Count >= 6 ? 3 : 2;
+
+            root.Add(infixBool, Occur.SHOULD);
+        }
 
         root.Add(tokenBool, Occur.SHOULD);
 

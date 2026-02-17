@@ -17,7 +17,14 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private string? selectedFolder;
     [ObservableProperty] private string status = "Vælg en mappe og søg.";
     [ObservableProperty] private string? query;
+    [ObservableProperty] private bool isResultsPaneOpen = true;
+    [ObservableProperty] private bool isRecentFoldersOpen = false;
+    
+    [RelayCommand]
+    private void ToggleResultsPane() => IsResultsPaneOpen = !IsResultsPaneOpen;
 
+    [RelayCommand]
+    private void ToggleRecentFolders() => IsRecentFoldersOpen = !IsRecentFoldersOpen;
     public ObservableCollection<SearchResult> Results { get; } = new();
 
     [ObservableProperty] private SearchResult? selectedResult;

@@ -82,10 +82,23 @@ public static class SnippetMaker
         {
             if (IsSingleToken(pattern))
             {
-                var re = BuildWholeWordRegex(pattern);
-                foreach (Match m in re.Matches(normalizedFullText))
-                {
+                // 1) whole-word hits (høj kvalitet)
+                var reWord = BuildWholeWordRegex(pattern);
+                foreach (Match m in reWord.Matches(normalizedFullText))
                     hits.Add((m.Index, m.Length, pattern));
+
+                // 2) infix hits (mid-word) hvis token >= 3
+                if (pattern.Length >= 3)
+                {
+                    int startIndex = 0;
+                    while (true)
+                    {
+                        var idx = normalizedFullText.IndexOf(pattern, startIndex, StringComparison.Ordinal);
+                        if (idx < 0) break;
+
+                        hits.Add((idx, pattern.Length, pattern));
+                        startIndex = idx + pattern.Length;
+                    }
                 }
             }
             else
@@ -196,8 +209,14 @@ public static class SnippetMaker
 
                 if (IsSingleToken(pat))
                 {
+                    // whole-word highlight
                     var re = BuildWholeWordRegex(pat);
                     snippet = re.Replace(snippet, m => $"[{m.Value}]");
+
+                    if (pat.Length >= 3 && !snippet.Contains($"[{pat}]", StringComparison.Ordinal))
+                    {
+                        snippet = snippet.Replace(pat, $"[{pat}]", StringComparison.Ordinal);
+                    }
                 }
                 else
                 {
