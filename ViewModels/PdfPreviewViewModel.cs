@@ -90,7 +90,8 @@ public partial class PdfPreviewViewModel : ObservableObject
     private void Render()
     {
         // Render med fast scale (2.0) – kan senere gøres zoom
-        var (bmp, pxW, pxH) = PdfRenderService.RenderPage(_pdfPath, CurrentPage);
+        var (bmp, pxW, pxH) =
+            PdfRenderService.RenderPage(_pdfPath, CurrentPage, scale: 0.8f);
         PageBitmap = bmp;
         PagePixelWidth = pxW;
         PagePixelHeight = pxH;
