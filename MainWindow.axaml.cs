@@ -14,17 +14,14 @@ namespace FileSearchTool;
 
 public partial class MainWindow : Window
 {
-    
     private Canvas? _mainOverlay;
     private PdfPreviewViewModel? _hookedPreview;
-    
+
     public MainWindow()
     {
         InitializeComponent();
 
         DataContext = new MainWindowViewModel();
-
-        _mainOverlay = this.FindControl<Canvas>("MainOverlayCanvas");
 
         if (DataContext is MainWindowViewModel vm)
         {
@@ -58,7 +55,7 @@ public partial class MainWindow : Window
             vm.Status = "Mappe valgt. Klar til søgning.";
         }
     }
-    
+
     private void QueryBox_KeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && DataContext is MainWindowViewModel vm)
@@ -69,7 +66,7 @@ public partial class MainWindow : Window
             e.Handled = true;
         }
     }
-    
+
     private void Results_DoubleTapped(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;
@@ -77,9 +74,11 @@ public partial class MainWindow : Window
         if (vm.OpenSelectedPreviewCommand.CanExecute(null))
             vm.OpenSelectedPreviewCommand.Execute(null);
     }
-    
+
     private void HookPreview(PdfPreviewViewModel? preview)
     {
+        _mainOverlay = this.FindControl<Canvas>("MainOverlayCanvas");
+        
         if (_hookedPreview != null)
             _hookedPreview.OverlayChanged -= PreviewOnOverlayChanged;
 
@@ -100,13 +99,17 @@ public partial class MainWindow : Window
 
         if (_hookedPreview == null) return;
 
-        foreach (var r in _hookedPreview.CurrentPageHitRectsPixels)
+        foreach (var (r, isActive) in _hookedPreview.CurrentPageHitRectsPixelsWithActive)
         {
             var rect = new Avalonia.Controls.Shapes.Rectangle
             {
                 Width = r.Width,
                 Height = r.Height,
-                Fill = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromArgb(120, 255, 255, 0)),
+                Fill = new Avalonia.Media.SolidColorBrush(
+                    isActive
+                        ? Avalonia.Media.Color.FromArgb(200, 255, 230, 0)  // tydeligere gul
+                        : Avalonia.Media.Color.FromArgb(90, 255, 255, 0)   // mere “svag”
+                ),
                 StrokeThickness = 0
             };
 

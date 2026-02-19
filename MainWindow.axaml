@@ -67,21 +67,23 @@
       <SplitView.Pane>
         <Border Padding="8" BorderThickness="1"
                 BorderBrush="{DynamicResource ThemeBorderMidBrush}">
-          <StackPanel Spacing="8">
+          <Grid RowDefinitions="Auto,*">
             <TextBlock Text="Resultater" FontWeight="Bold"/>
-            <ListBox ItemsSource="{Binding Results}"
+
+            <ListBox Grid.Row="1"
+                     ItemsSource="{Binding Results}"
                      SelectedItem="{Binding SelectedResult}"
                      DoubleTapped="Results_DoubleTapped">
               <ListBox.ItemTemplate>
                 <DataTemplate>
                   <StackPanel Spacing="2">
                     <TextBlock Text="{Binding FileName}" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding Snippet}" Opacity="0.8" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding HitSummary}" Opacity="0.85" TextWrapping="Wrap"/>
                   </StackPanel>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-          </StackPanel>
+          </Grid>
         </Border>
       </SplitView.Pane>
 
@@ -137,23 +139,30 @@
         <Border Grid.Column="0" Padding="8"
                 BorderThickness="1"
                 BorderBrush="{DynamicResource ThemeBorderMidBrush}">
-          <StackPanel Spacing="8">
+          <Grid RowDefinitions="Auto,*">
             <TextBlock Text="Hits" FontWeight="Bold"/>
-            <ListBox ItemsSource="{Binding CurrentPreview.SidebarItems}"
+
+            <ListBox Grid.Row="1"
+                     ItemsSource="{Binding CurrentPreview.SidebarItems}"
                      SelectedItem="{Binding CurrentPreview.SelectedSidebarItem}">
               <ListBox.ItemTemplate>
                 <DataTemplate>
-                  <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Context}" Opacity="0.85" TextWrapping="Wrap"/>
+                  </StackPanel>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-          </StackPanel>
+          </Grid>
         </Border>
+
 
         <Border Grid.Column="1" Padding="8"
                 BorderThickness="1"
                 BorderBrush="{DynamicResource ThemeBorderMidBrush}">
-          <Viewbox Stretch="Uniform">
+          <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Auto">
             <Grid>
               <Image Source="{Binding CurrentPreview.PageBitmap}"
                      Stretch="None"
@@ -165,7 +174,7 @@
                       Width="{Binding CurrentPreview.PagePixelWidth}"
                       Height="{Binding CurrentPreview.PagePixelHeight}" />
             </Grid>
-          </Viewbox>
+          </ScrollViewer>
         </Border>
 
       </Grid>

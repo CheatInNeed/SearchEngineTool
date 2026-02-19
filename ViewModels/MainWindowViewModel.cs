@@ -27,7 +27,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     [RelayCommand]
     private void ToggleRecentFolders() => IsRecentFoldersOpen = !IsRecentFoldersOpen;
-    public ObservableCollection<SearchResult> Results { get; } = new();
+    public ObservableCollection<SearchResultSummary> Results { get; } = new();
     
     [RelayCommand]
     private void OpenSelectedPreview()
@@ -36,7 +36,7 @@ public partial class MainWindowViewModel : ObservableObject
         OpenPreviewForResult(SelectedResult);
     }
 
-    [ObservableProperty] private SearchResult? selectedResult;
+    [ObservableProperty] private SearchResultSummary? selectedResult;
 
     // XAML bruger disse:
     public ObservableCollection<FolderItem> RecentFolders { get; } = new();
@@ -88,7 +88,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         try
         {
-            Status = "Indekserer...";
+            Status = "Tjekker index...";
             await _searchService.BuildIndexAsync(folder);
             Status = "Klar til søgning.";
         }
@@ -117,27 +117,32 @@ public partial class MainWindowViewModel : ObservableObject
         {
             Status = "Søger...";
 
-            var found = await _searchService.SearchAsync(SelectedFolder, Query);
+            var found = await _searchService.SearchSummaryAsync(SelectedFolder, Query);
 
             Results.Clear();
             foreach (var r in found)
                 Results.Add(r);
 
+            // Vælg bedste dokument (allerøverst)
             SelectedResult = Results.FirstOrDefault();
-            Status = $"Fandt {Results.Count} resultater.";
-            
-            // Auto: vis bedste PDF-resultat i preview
-            var bestPdf = Results.FirstOrDefault(x =>
-                string.Equals(Path.GetExtension(x.FilePath), ".pdf", StringComparison.OrdinalIgnoreCase));
+            Status = $"Fandt {Results.Count} dokumenter.";
 
-            if (bestPdf != null)
+            // 7) pdfpreview skal altid vise bedste hit totalt set
+            var best = SelectedResult;
+            if (best != null && string.Equals(Path.GetExtension(best.FilePath), ".pdf", StringComparison.OrdinalIgnoreCase))
             {
-                SelectedResult = bestPdf;
-                OpenPreviewForResult(bestPdf);
+                OpenPreviewForResult(best);
             }
             else
             {
-                CurrentPreview = null;
+                // hvis top ikke er pdf: find bedste pdf i listen
+                var bestPdf = Results.FirstOrDefault(x =>
+                    string.Equals(Path.GetExtension(x.FilePath), ".pdf", StringComparison.OrdinalIgnoreCase));
+
+                if (bestPdf != null)
+                    OpenPreviewForResult(bestPdf);
+                else
+                    CurrentPreview = null;
             }
         }
         catch
@@ -146,7 +151,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
     
-    private void OpenPreviewForResult(SearchResult r)
+    private void OpenPreviewForResult(SearchResultSummary r)
     {
         if (string.IsNullOrWhiteSpace(Query)) return;
 
@@ -154,11 +159,8 @@ public partial class MainWindowViewModel : ObservableObject
         if (!string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
             return;
 
-        // HitNumber i SearchResult er "snippet nr", ikke PDF-hit-index.
-        // Vi bruger den som et forsøg på at starte “nogenlunde rigtigt”.
-        var startAt = Math.Max(0, r.HitNumber - 1);
-
-        CurrentPreview = new PdfPreviewViewModel(path, Query!, startAtHit: startAt);
+        // start ALTID på bedste hit (0) – dit hit-list bliver sorteret i PdfPreviewViewModel
+        CurrentPreview = new PdfPreviewViewModel(path, Query!, startAtHit: 0);
     }
     
     partial void OnCurrentPreviewChanged(PdfPreviewViewModel? value)

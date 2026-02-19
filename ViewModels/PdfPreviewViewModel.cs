@@ -17,6 +17,9 @@ public partial class PdfPreviewViewModel : ObservableObject
 {
     public event EventHandler? OverlayChanged;
     public ObservableCollection<PdfSidebarItem> SidebarItems { get; } = new();
+    
+    public IReadOnlyList<(Rect rect, bool isActive)> CurrentPageHitRectsPixelsWithActive { get; private set; }
+        = Array.Empty<(Rect rect, bool isActive)>();
 
     private readonly string _pdfPath;
     private readonly List<PdfHit> _hits;
@@ -55,7 +58,7 @@ public partial class PdfPreviewViewModel : ObservableObject
     [RelayCommand]
     private void ZoomReset()
     {
-        Zoom = 0.8f;
+        Zoom = 1.0f;
     }
     
     [RelayCommand]
@@ -87,15 +90,20 @@ public partial class PdfPreviewViewModel : ObservableObject
         _hits.Count == 0 ? $"0 hits (Side {CurrentPage})"
             : $"{CurrentHitIndex + 1}/{_hits.Count} (Side {_hits[CurrentHitIndex].PageNumber})";
 
-
-    // Pixel rects for current page
-    public IReadOnlyList<Rect> CurrentPageHitRectsPixels { get; private set; } = Array.Empty<Rect>();
-
     public PdfPreviewViewModel(string pdfPath, string rawQuery, int? startAtHit = null)
     {
         _pdfPath = pdfPath;
 
         _hits = PdfHitFinder.FindAllHits(pdfPath, rawQuery);
+        
+        _hits.Sort((a, b) =>
+        {
+            int c = b.Score.CompareTo(a.Score);
+            if (c != 0) return c;
+            c = a.PageNumber.CompareTo(b.PageNumber);
+            if (c != 0) return c;
+            return a.HitIndex.CompareTo(b.HitIndex);
+        });
         
         using (var doc = PdfDocument.Open(_pdfPath))
         {
@@ -114,7 +122,7 @@ public partial class PdfPreviewViewModel : ObservableObject
             list.Add(i);
         }
         
-        BuildSidebarItemsDistinctPages();
+        BuildSidebarItemsAllHits();
 
         if (_hits.Count == 0)
         {
@@ -161,6 +169,9 @@ public partial class PdfPreviewViewModel : ObservableObject
         UpdateOverlay();
         OnPropertyChanged(nameof(HitStatus));
         OnPropertyChanged(nameof(PageStatus));
+        
+        SelectedSidebarItem = SidebarItems.FirstOrDefault(s => s.HitListIndex == CurrentHitIndex)
+                              ?? SelectedSidebarItem;
     }
 
 
@@ -184,16 +195,16 @@ public partial class PdfPreviewViewModel : ObservableObject
 
     private void UpdateOverlay()
     {
-        // Alle hits på current page
         var pageHits = _hits.Where(h => h.PageNumber == CurrentPage).ToList();
 
-        // konverter PDF coords -> pixels
-        // PDF coords: origin bottom-left
-        // Pixel coords: origin top-left
         var sx = PagePixelWidth / _pagePdfWidth;
         var sy = PagePixelHeight / _pagePdfHeight;
 
-        var rects = new List<Rect>();
+        var active = (_hits.Count > 0 && CurrentHitIndex >= 0 && CurrentHitIndex < _hits.Count)
+            ? _hits[CurrentHitIndex]
+            : null;
+
+        var rectsWithFlags = new List<(Rect rect, bool isActive)>();
 
         foreach (var h in pageHits)
         {
@@ -205,16 +216,20 @@ public partial class PdfPreviewViewModel : ObservableObject
                 var w = b.Width * sx;
                 var hpx = b.Height * sy;
 
-                // flip Y:
                 var y = PagePixelHeight - (yFromBottom + hpx);
 
-                rects.Add(new Rect(x, y, w, hpx));
+                bool isActive = active != null
+                                && active.PageNumber == CurrentPage
+                                && h.HitIndex == active.HitIndex;
+
+                rectsWithFlags.Add((new Rect(x, y, w, hpx), isActive));
             }
         }
 
-        CurrentPageHitRectsPixels = rects;
+        CurrentPageHitRectsPixelsWithActive = rectsWithFlags;
         OverlayChanged?.Invoke(this, EventArgs.Empty);
     }
+
     
     partial void OnZoomChanged(float value)
     {
@@ -228,7 +243,6 @@ public partial class PdfPreviewViewModel : ObservableObject
     private void GoToPage(int pageNumber, bool preferFirstHit)
     {
         CurrentPage = pageNumber;
-        Render();
 
         // Vælg et hit på den side, hvis der findes hits
         if (_hitIndexesByPage.TryGetValue(pageNumber, out var hitList) && hitList.Count > 0)
@@ -236,8 +250,8 @@ public partial class PdfPreviewViewModel : ObservableObject
             CurrentHitIndex = preferFirstHit ? hitList[0] : hitList[^1];
         }
 
-        UpdateOverlay();
-        OnPropertyChanged(nameof(HitStatus));
+        Render();
+
         OnPropertyChanged(nameof(PageStatus));
     }
     
@@ -248,33 +262,28 @@ public partial class PdfPreviewViewModel : ObservableObject
         JumpToHit();
     }
     
-    private void BuildSidebarItemsDistinctPages()
+    private void BuildSidebarItemsAllHits()
     {
         SidebarItems.Clear();
         if (_hits.Count == 0) return;
 
-        // "Kun hits der differenterer sig meget":
-        // Her tolker jeg det som: vis kun 1 entry pr side (første/beste hit på siden)
-        // = mindre støj, men du kan stadig Next/Prev gennem ALLE hits.
-        var bestPerPage = _hits
+        var ordered = _hits
             .Select((h, idx) => (hit: h, idx))
-            .GroupBy(x => x.hit.PageNumber)
-            .Select(g =>
-            {
-                // vælg højeste score på siden; hvis tie, første forekomst
-                var best = g.OrderByDescending(x => x.hit.Score).ThenBy(x => x.idx).First();
-                return best;
-            })
-            .OrderBy(x => x.hit.PageNumber)
+            .OrderByDescending(x => x.hit.Score)      // boost først
+            .ThenBy(x => x.hit.PageNumber)
+            .ThenBy(x => x.idx)
             .ToList();
 
-        foreach (var x in bestPerPage)
+        foreach (var x in ordered)
         {
-            var title = $"Side {x.hit.PageNumber}  ·  {x.hit.MatchedToken}";
-            SidebarItems.Add(new PdfSidebarItem(title, x.idx, x.hit.PageNumber, x.hit.Score));
+            var title = $"Side {x.hit.PageNumber}  ·  {x.hit.MatchedToken}  ·  {x.hit.Score:0.0}x";
+            SidebarItems.Add(new PdfSidebarItem(title, x.hit.Context, x.idx, x.hit.PageNumber, x.hit.Score));
         }
 
-        SelectedSidebarItem = SidebarItems.FirstOrDefault(s => s.PageNumber == CurrentPage) ?? SidebarItems.FirstOrDefault();
+        // sync selection
+        SelectedSidebarItem = SidebarItems.FirstOrDefault(s => s.HitListIndex == CurrentHitIndex)
+                              ?? SidebarItems.FirstOrDefault();
     }
+
 
 }

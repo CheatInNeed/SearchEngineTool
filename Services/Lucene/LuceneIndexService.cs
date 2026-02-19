@@ -41,6 +41,13 @@ public class LuceneIndexService
         _indexPaths = indexPaths ?? throw new ArgumentNullException(nameof(indexPaths));
         _analyzer = analyzer ?? throw new ArgumentNullException(nameof(analyzer));
     }
+    
+    public Dictionary<string, long> GetIndexedLastModifiedTicks(string rootFolder)
+    {
+        var indexDirPath = _indexPaths.GetIndexDirectory(rootFolder);
+        using var dir = FSDirectory.Open(new DirectoryInfo(indexDirPath));
+        return LoadExistingLastModifiedTicks(dir);
+    }
 
     /// <summary>
     /// Checks whether a Lucene index exists for the given root folder.
@@ -196,4 +203,36 @@ public class LuceneIndexService
         s = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").Trim();
         return s;
     }
+    
+    public void DeleteDocumentsMissingOnDisk(string rootFolder, HashSet<string> existingFiles)
+    {
+        var indexDirPath = _indexPaths.GetIndexDirectory(rootFolder);
+        using var dir = FSDirectory.Open(new DirectoryInfo(indexDirPath));
+
+        if (!DirectoryReader.IndexExists(dir))
+            return;
+
+        var config = new IndexWriterConfig(_version, _analyzer)
+        {
+            OpenMode = OpenMode.CREATE_OR_APPEND
+        };
+
+        using var writer = new IndexWriter(dir, config);
+        using var reader = DirectoryReader.Open(dir);
+
+        for (int docId = 0; docId < reader.MaxDoc; docId++)
+        {
+            var doc = reader.Document(docId);
+            var path = doc.Get(FieldPath);
+            if (string.IsNullOrWhiteSpace(path)) continue;
+
+            if (!existingFiles.Contains(path))
+            {
+                writer.DeleteDocuments(new Term(FieldPath, path));
+            }
+        }
+
+        writer.Commit();
+    }
+
 }

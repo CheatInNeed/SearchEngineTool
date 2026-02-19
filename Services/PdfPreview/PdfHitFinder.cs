@@ -40,6 +40,7 @@ public static class PdfHitFinder
         {
             // PdfPig words + bbox
             var words = page.GetWords().ToList();
+            var originalWordTexts = words.Select(w => w.Text).ToList();
             if (words.Count == 0) continue;
 
             // normaliser hvert ord til token(s)
@@ -72,8 +73,20 @@ public static class PdfHitFinder
                     {
                         var phraseWords = flat.Skip(i).Take(qTokens.Count).Select(x => x.word).Distinct().ToList();
                         var rects = phraseWords.Select(w => ToAvaloniaRect(w.BoundingBox)).ToArray();
+                        
+                        var firstWord = flat[i].word;
+                        var startIdx = words.IndexOf(firstWord);
+                        var ctx = startIdx >= 0
+                            ? BuildMicroContext(originalWordTexts, startIdx, Math.Max(1, phraseWords.Count))
+                            : $"… {string.Join(" ", qTokens)} …";
 
-                        hits.Add(new PdfHit(++hitIndex, page.Number, rects, Score: 3.0f, MatchedToken: string.Join(" ", qTokens)));
+                        hits.Add(new PdfHit(
+                            ++hitIndex,
+                            page.Number,
+                            rects,
+                            Score: 3.0f,
+                            MatchedToken: string.Join(" ", qTokens),
+                            Context: ctx));
 
 
                     }
@@ -88,14 +101,21 @@ public static class PdfHitFinder
                 foreach (var q in distinctQueryTokens)
                 {
                     if (q.Length == 0) continue;
-
+                    
+                    var startIdx = words.IndexOf(word);
+                    var ctx = startIdx >= 0
+                        ? BuildMicroContext(originalWordTexts, startIdx, 1)
+                        : $"… {word.Text} …";
+                    
                     // Exact match: høj score
                     if (string.Equals(token, q, StringComparison.Ordinal))
                     {
+                        
                         hits.Add(new PdfHit(++hitIndex, page.Number,
                             new[] { ToAvaloniaRect(word.BoundingBox) },
                             Score: 2.0f,
-                            MatchedToken: q));
+                            MatchedToken: q,
+                            Context: ctx));
                         continue;
                     }
 
@@ -105,7 +125,8 @@ public static class PdfHitFinder
                         hits.Add(new PdfHit(++hitIndex, page.Number,
                             new[] { ToAvaloniaRect(word.BoundingBox) },
                             Score: 1.0f,
-                            MatchedToken: q));
+                            MatchedToken: q,
+                            Context: ctx));
                     }
                 }
             }
@@ -121,4 +142,30 @@ public static class PdfHitFinder
         // Vi gemmer raw PDF coords og konverterer senere når vi tegner overlay.
         return new Rect(r.Left, r.Bottom, r.Width, r.Height);
     }
+    
+    private static string BuildMicroContext(List<string> originalWords, int startWordIndex, int lengthWords)
+    {
+        // 3 ord på hver side
+        int left = Math.Max(0, startWordIndex - 3);
+        int right = Math.Min(originalWords.Count - 1, (startWordIndex + lengthWords - 1) + 3);
+
+        var slice = originalWords.Skip(left).Take(right - left + 1).ToList();
+
+        // Markér selve match-blokken i midten med [ ]
+        int markStart = startWordIndex - left;
+        int markEnd = markStart + lengthWords - 1;
+
+        for (int i = 0; i < slice.Count; i++)
+        {
+            if (i == markStart) slice[i] = "[" + slice[i];
+            if (i == markEnd) slice[i] = slice[i] + "]";
+        }
+
+        var s = string.Join(" ", slice);
+        if (left > 0) s = "… " + s;
+        if (right < originalWords.Count - 1) s = s + " …";
+        return s;
+    }
+
+    
 }
