@@ -34,7 +34,7 @@ public class LuceneSearchService
     public List<(string path, float score, string? storedContent)> Search(
         string rootFolder,
         string rawQuery,
-        int topN = 50)
+        int topN = 200)
     {
         var results = new List<(string path, float score, string? storedContent)>();
 
@@ -58,6 +58,7 @@ public class LuceneSearchService
                 return results;
 
             using var reader = DirectoryReader.Open(dir);
+            
             var searcher = new IndexSearcher(reader);
 
             var query = _queryBuilder.Build(rawQuery);

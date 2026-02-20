@@ -171,63 +171,60 @@ public class IndexedSearchService
         _indexedRootFolder = rootFolder;
     }
 
-    // Lucene top docs
-    var hits = _luceneSearchService.Search(rootFolder, query);
+    // === Stage 1: Retrieval (top 200) ===
+    var hits = _luceneSearchService.Search(rootFolder, query, topN: 200);
 
-    foreach (var (path, score, storedContent) in hits)
+    // === Stage 2: Re-rank (top 200 -> sort by FinalScore -> take 50) ===
+    var scored = new List<SearchResultSummary>(hits.Count);
+
+    foreach (var (path, luceneScore, storedContent) in hits)
     {
         try
         {
-            // Kun 1 entry pr dokument:
-            int phrase = 0, exact = 0, infix = 0;
+            // Use storedContent if present; else fallback extract (slower)
+            string text = !string.IsNullOrWhiteSpace(storedContent)
+                ? storedContent!
+                : TextExtractorFactory.Create(path).ExtractText(path);
 
-            // PDFs: brug PdfHitFinder, fordi du alligevel skal bruge hits i preview
-            if (string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
-            {
-                var pdfHits = FileSearchTool.Services.PdfPreview.PdfHitFinder.FindAllHits(path, query);
+            var breakdown = FileSearchTool.Services.Ranking.ReRankScorer
+                .ScoreDocument(query, luceneScore, text);
 
-                // PdfHitFinder scores: 3 phrase, 2 exact, 1 infix (som du har i koden)
-                phrase = pdfHits.Count(h => Math.Abs(h.Score - 3.0f) < 0.001f);
-                exact  = pdfHits.Count(h => Math.Abs(h.Score - 2.0f) < 0.001f);
-                infix  = pdfHits.Count(h => Math.Abs(h.Score - 1.0f) < 0.001f);
-            }
-            else
-            {
-                // Ikke-PDF: lav en simpel count via tekst (hurtig og stabil)
-                string text = !string.IsNullOrWhiteSpace(storedContent)
-                    ? storedContent!
-                    : TextExtractorFactory.Create(path).ExtractText(path);
-
-                var q = query.Trim();
-                var tokens = q.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                              .Distinct(StringComparer.OrdinalIgnoreCase)
-                              .ToList();
-
-                if (tokens.Count >= 2 && text.Contains(q, StringComparison.OrdinalIgnoreCase))
-                    phrase = 1; // “mindst én phrase” (kan udvides senere)
-
-                foreach (var t in tokens)
-                {
-                    if (text.Contains(t, StringComparison.OrdinalIgnoreCase))
-                        exact++;
-                }
-            }
-
-            // TotalScore: primært Lucene score, men du kan “hjælpe” sortering lidt med counts
-            float total = score + (phrase * 12f) + (exact * 6f) + (infix * 2.5f);
-
-            results.Add(new SearchResultSummary(path, total, phrase, exact, infix));
+            scored.Add(new SearchResultSummary(
+                FilePath: path,
+                FinalScore: breakdown.FinalScore,
+                LuceneScore: breakdown.LuceneScore,
+                ProximityScore: breakdown.ProximityScore,
+                PhraseBonus: breakdown.PhraseBonus,
+                DensityScore: breakdown.DensityScore,
+                AllTermsBonus: breakdown.AllTermsBonus,
+                SpanLength: breakdown.SpanLength,
+                MatchedDistinctTerms: breakdown.MatchedDistinctTerms,
+                ContainsAllTerms: breakdown.ContainsAllTerms
+            ));
         }
         catch
         {
-            // swallow per doc
+            // If re-rank fails for a doc, keep Lucene baseline (don’t drop result)
+            scored.Add(new SearchResultSummary(
+                FilePath: path,
+                FinalScore: luceneScore,
+                LuceneScore: luceneScore,
+                ProximityScore: 0,
+                PhraseBonus: 0,
+                DensityScore: 0,
+                AllTermsBonus: 0,
+                SpanLength: FileSearchTool.Services.Ranking.RankingWeights.MinSpanFallback,
+                MatchedDistinctTerms: 0,
+                ContainsAllTerms: false
+            ));
         }
     }
 
-    // Sortér så “bedste” er øverst
-    return results
-        .OrderByDescending(r => r.TotalScore)
+    return scored
+        .OrderByDescending(x => x.FinalScore)
+        .Take(50)
         .ToList();
 }
+
 
 }
