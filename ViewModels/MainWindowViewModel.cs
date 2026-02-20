@@ -90,7 +90,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             Status = "Tjekker index...";
             await _searchService.BuildIndexAsync(folder);
-            Status = "Klar til søgning.";
+            Status = "Klar til søgning. (Hvis analyzer ændres: slet index folder og re-index.)";
         }
         catch
         {

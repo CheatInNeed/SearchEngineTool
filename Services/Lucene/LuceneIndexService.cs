@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using System.Linq;
 using Lucene.Net.Analysis;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Analysis.Util;
@@ -22,6 +23,12 @@ public class LuceneIndexService
     private const string FieldLastModifiedTicks = "lastModifiedTicks";
     private const string FieldContentInfix = "contentInfix";
     private const string FieldTitle = "title";
+    private const string FieldLastModifiedTicksDv = "lastModifiedTicks_dv";
+    private const string FieldFileSizeBytes = "fileSizeBytes";
+    private const string FieldFileSizeBytesDv = "fileSizeBytes_dv";
+    private const string FieldFolderDepth = "folderDepth";
+    private const string FieldFolderDepthDv = "folderDepth_dv";
+    private const string FieldContentHash = "contentHash";
 
     private readonly LuceneIndexPaths _indexPaths;
     private readonly Analyzer _analyzer;
@@ -106,27 +113,40 @@ public class LuceneIndexService
 
                 try
                 {
-                    long currentTicks;
-                    try
-                    {
-                        // If file exists, use its last write time. Otherwise index anyway.
-                        currentTicks = File.Exists(path)
-                            ? File.GetLastWriteTimeUtc(path).Ticks
-                            : 0L;
-                    }
-                    catch
-                    {
-                        currentTicks = 0L;
-                    }
+                    // last modified
+                    long currentTicks = 0;
+                    try { currentTicks = File.GetLastWriteTimeUtc(path).Ticks; } catch { /* ignore */ }
 
-                    // Incremental: skip if unchanged
+                    // incremental skip (hvis vi har ticks i index)
                     if (existingTicksByPath.TryGetValue(path, out var oldTicks) && oldTicks == currentTicks)
                         continue;
 
-                    var fileName = Path.GetFileName(path) ?? "";
+                    // filename / title / ext
+                    var fileName = Path.GetFileName(path);
+                    var title = Path.GetFileNameWithoutExtension(path);
                     var ext = Path.GetExtension(path) ?? "";
-                    var title = Path.GetFileNameWithoutExtension(path) ?? fileName;
-                    
+
+                    // file size
+                    long fileSizeBytes = 0;
+                    try
+                    {
+                        if (File.Exists(path))
+                            fileSizeBytes = new FileInfo(path).Length;
+                    }
+                    catch { /* ignore */ }
+
+                    // folder depth relativt til rootFolder
+                    int folderDepth = 0;
+                    try
+                    {
+                        var rel = Path.GetRelativePath(rootFolder, path);
+                        folderDepth = rel.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar);
+                    }
+                    catch { /* ignore */ }
+
+                    var normalized = NormalizeForIndex(content);
+                    var contentHash = ComputeSha1(normalized);
+
                     var doc = new Document
                     {
                         new StringField(FieldPath, path, Field.Store.YES),
@@ -134,15 +154,28 @@ public class LuceneIndexService
                         new TextField(FieldTitle, title, Field.Store.YES),
                         new TextField(FieldFilename, fileName, Field.Store.YES),
 
-                        new TextField(FieldContent, NormalizeForIndex(content), Field.Store.NO),
-                        new TextField(FieldContentInfix, NormalizeForIndex(content), Field.Store.NO),
+                        new TextField(FieldContent, normalized, Field.Store.NO),
+                        new TextField(FieldContentInfix, normalized, Field.Store.NO),
 
                         new StoredField(FieldContentStored, content),
                         new StringField(FieldExt, ext, Field.Store.YES),
-                        new StoredField(FieldLastModifiedTicks, currentTicks)
+
+                        // Stored + DocValues til rerank
+                        new StoredField(FieldLastModifiedTicks, currentTicks),
+                        new NumericDocValuesField(FieldLastModifiedTicksDv, currentTicks),
+
+                        new StoredField(FieldFileSizeBytes, fileSizeBytes),
+                        new NumericDocValuesField(FieldFileSizeBytesDv, fileSizeBytes),
+
+                        new StoredField(FieldFolderDepth, folderDepth),
+                        new NumericDocValuesField(FieldFolderDepthDv, folderDepth),
+
+                        // Dedup/collapse support
+                        new StringField(FieldContentHash, contentHash, Field.Store.YES),
                     };
 
                     writer.UpdateDocument(new Term(FieldPath, path), doc);
+                    existingTicksByPath[path] = currentTicks;
                     changed = true;
                 }
                 catch
@@ -150,6 +183,7 @@ public class LuceneIndexService
                     // One bad file must not break entire indexing
                 }
             }
+
 
             if (changed)
                 writer.Commit();
@@ -237,5 +271,21 @@ public class LuceneIndexService
 
         writer.Commit();
     }
+    
+    private static string ComputeSha1(string s)
+    {
+        try
+        {
+            using var sha1 = System.Security.Cryptography.SHA1.Create();
+            var bytes = System.Text.Encoding.UTF8.GetBytes(s ?? "");
+            var hash = sha1.ComputeHash(bytes);
+            return Convert.ToHexString(hash);
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
 
 }
