@@ -5,7 +5,7 @@ if (Test-Path $outputFile) {
     Remove-Item $outputFile
 }
 
-$files = Get-ChildItem -Path $root -Recurse -Include *.cs,*.axaml,*.xaml -File |
+$files = Get-ChildItem -Path $root -Recurse -Include *.cs,*.axaml,*.xaml,*.txt,*.md -File |
 Where-Object { $_.FullName -notmatch "bin|obj|.git" }
 
 foreach ($file in $files) {

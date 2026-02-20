@@ -1,0 +1,14 @@
+{
+  "LuceneScore": 1.0,
+  "ProximityScore": 1.0,
+  "PhraseBonus": 1.0,
+  "DensityScore": 1.0,
+  "AllTermsBonus": 1.0,
+
+  "FreshnessScore": 0.6,
+  "FiletypeScore": 0.4,
+  "FolderDepthScore": 0.2,
+
+  "EarlyScore": 0.6,
+  "CoverageScore": 0.8
+}

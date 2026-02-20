@@ -13,6 +13,8 @@ namespace FileSearchTool.Services.Lucene;
 
 public class LuceneQueryBuilder
 {
+    private const string FieldTitle = "title";
+    private const string FieldFilename = "filename";
     private const string FieldContent = "content";
     private const string FieldContentInfix = "contentInfix";
 
@@ -31,94 +33,121 @@ public class LuceneQueryBuilder
     /// - Adds a small minimum-should-match for longer queries
     /// </summary>
     public Query Build(string rawQuery)
+{
+    if (string.IsNullOrWhiteSpace(rawQuery))
+        return new BooleanQuery();
+
+    var normalized = NormalizeWhitespace(rawQuery);
+    normalized = NormalizeForQuery(normalized);
+
+    var tokens = AnalyzeToTerms(FieldContent, normalized)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    if (tokens.Count == 0)
+        return new BooleanQuery();
+
+    // === Tunable boosts (Stage 1: retrieval only) ===
+    const float BoostTitle = 4.0f;
+    const float BoostFilename = 2.5f;
+    const float BoostContent = 1.0f;
+
+    const int ExactPhraseSlop = 3;   // 2–3
+    const int LoosePhraseSlop = 12;  // 10–15
+
+    const float ExactPhraseBoost = 12.0f;
+    const float LoosePhraseBoost = 6.0f;
+
+    const float AllTermsBoost = 5.0f;
+    const float TokenBoost = 1.2f;
+    const float InfixBoost = 0.8f;
+
+    var root = new BooleanQuery();
+
+    // Helper to add a boosted query as SHOULD
+    void AddShould(Query q, float boost)
     {
-        if (string.IsNullOrWhiteSpace(rawQuery))
-            return new BooleanQuery();
+        q.Boost = boost;
+        root.Add(q, Occur.SHOULD);
+    }
 
-        var normalized = NormalizeWhitespace(rawQuery);
-        normalized = NormalizeForQuery(normalized);
-        var tokens = AnalyzeToTerms(FieldContent, normalized);
-
-        if (tokens.Count == 0)
-            return new BooleanQuery();
-
-        var root = new BooleanQuery();
-
-        // A) Phrase query (boost high) if query has 2+ tokens
-        if (tokens.Count >= 2)
+    // === A) Phrase queries (exact + loose) across fields ===
+    if (tokens.Count >= 2)
+    {
+        PhraseQuery BuildPhrase(string field, int slop)
         {
-            var phrase = new PhraseQuery();
-
-            // Keep phrase fairly strict (slop = 0)
-            // Later we can allow small slop like 1-2.
-            phrase.Slop = 3;
-
+            var pq = new PhraseQuery { Slop = slop };
             foreach (var t in tokens)
-                phrase.Add(new Term(FieldContent, t));
-
-            phrase.Boost = 12.0f;
-            root.Add(phrase, Occur.SHOULD);
+                pq.Add(new Term(field, t));
+            return pq;
         }
 
-        // B) Token queries (boost lower)
-        var tokenBool = new BooleanQuery();
+        // Exact phrase (high)
+        AddShould(BuildPhrase(FieldTitle, ExactPhraseSlop), ExactPhraseBoost * BoostTitle);
+        AddShould(BuildPhrase(FieldFilename, ExactPhraseSlop), ExactPhraseBoost * BoostFilename);
+        AddShould(BuildPhrase(FieldContent, ExactPhraseSlop), ExactPhraseBoost * BoostContent);
 
+        // Loose phrase (medium)
+        AddShould(BuildPhrase(FieldTitle, LoosePhraseSlop), LoosePhraseBoost * BoostTitle);
+        AddShould(BuildPhrase(FieldFilename, LoosePhraseSlop), LoosePhraseBoost * BoostFilename);
+        AddShould(BuildPhrase(FieldContent, LoosePhraseSlop), LoosePhraseBoost * BoostContent);
+    }
+
+    // === B) All-terms match (MUST all tokens) ===
+    BooleanQuery BuildAllTerms(string field)
+    {
+        var bq = new BooleanQuery();
+        foreach (var t in tokens)
+            bq.Add(new TermQuery(new Term(field, t)), Occur.MUST);
+        return bq;
+    }
+
+    AddShould(BuildAllTerms(FieldTitle), AllTermsBoost * BoostTitle);
+    AddShould(BuildAllTerms(FieldFilename), AllTermsBoost * BoostFilename);
+    AddShould(BuildAllTerms(FieldContent), AllTermsBoost * BoostContent);
+
+    // === C) Token matches (SHOULD) ===
+    BooleanQuery BuildTokenShoulds(string field, float fieldBoost)
+    {
+        var bq = new BooleanQuery();
         foreach (var t in tokens)
         {
-            var termQuery = new TermQuery(new Term(FieldContent, t));
-            termQuery.Boost = 1.0f;
-            tokenBool.Add(termQuery, Occur.SHOULD);
+            var tq = new TermQuery(new Term(field, t)) { Boost = TokenBoost * fieldBoost };
+            bq.Add(tq, Occur.SHOULD);
         }
 
-        // MinimumShouldMatch: if many tokens, require some to match
-        // This prevents "one random word" matching from dominating.
+        // mild MSM to reduce noise on longer queries
         if (tokens.Count >= 4)
-        {
-            // Example: 4-5 tokens => require 2; 6+ tokens => require 3
-            tokenBool.MinimumNumberShouldMatch = tokens.Count >= 6 ? 3 : 2;
-        }
-        
-        // C) AND-query: kræv at ALLE tokens findes (men stadig som SHOULD i root)
-        var mustAll = new BooleanQuery();
-        foreach (var t in tokens.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            mustAll.Add(new TermQuery(new Term(FieldContent, t)), Occur.MUST);
-        }
-        mustAll.Boost = 6.0f;
-        root.Add(mustAll, Occur.SHOULD);
-        
-        // D) Infix token queries (mid-word). Only for tokens length >= 3
-        var infixBool = new BooleanQuery();
-        foreach (var t in tokens.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (t.Length < 3) continue;
+            bq.MinimumNumberShouldMatch = tokens.Count >= 6 ? 3 : 2;
 
-            // TermQuery against the ngram-indexed field
-            var tq = new TermQuery(new Term(FieldContentInfix, t))
-            {
-                Boost = 2.5f
-            };
-            infixBool.Add(tq, Occur.SHOULD);
-        }
-
-        // If we have any infix clauses, add them (lower than phrase, higher than loose tokens)
-        if (infixBool.Clauses.Count > 0)
-        {
-            // Mild minimum match to reduce noise
-            if (tokens.Count >= 4)
-                infixBool.MinimumNumberShouldMatch = tokens.Count >= 6 ? 3 : 2;
-
-            root.Add(infixBool, Occur.SHOULD);
-        }
-
-        root.Add(tokenBool, Occur.SHOULD);
-
-        // If everything is SHOULD, Lucene will allow documents that match none.
-        // So require at least one SHOULD clause to match by setting MinimumShouldMatch on root.
-        root.MinimumNumberShouldMatch = 1;
-
-        return root;
+        return bq;
     }
+
+    root.Add(BuildTokenShoulds(FieldTitle, BoostTitle), Occur.SHOULD);
+    root.Add(BuildTokenShoulds(FieldFilename, BoostFilename), Occur.SHOULD);
+    root.Add(BuildTokenShoulds(FieldContent, BoostContent), Occur.SHOULD);
+
+    // === D) Infix ngram support (optional, low/med) ===
+    var infixBool = new BooleanQuery();
+    foreach (var t in tokens)
+    {
+        if (t.Length < 3) continue;
+        var tq = new TermQuery(new Term(FieldContentInfix, t)) { Boost = InfixBoost };
+        infixBool.Add(tq, Occur.SHOULD);
+    }
+
+    if (infixBool.Clauses.Count > 0)
+    {
+        if (tokens.Count >= 4)
+            infixBool.MinimumNumberShouldMatch = tokens.Count >= 6 ? 3 : 2;
+        root.Add(infixBool, Occur.SHOULD);
+    }
+
+    // Require at least one SHOULD to match
+    root.MinimumNumberShouldMatch = 1;
+    return root;
+}
+
     private List<string> AnalyzeToTerms(string fieldName, string text)
     {
         var terms = new List<string>();

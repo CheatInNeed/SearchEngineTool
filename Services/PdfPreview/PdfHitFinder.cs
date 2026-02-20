@@ -84,7 +84,7 @@ public static class PdfHitFinder
                             ++hitIndex,
                             page.Number,
                             rects,
-                            Score: 3.0f,
+                            Score: 6.0f + EarlyBonus(page.Number, i) + PhraseLengthBonus(qTokens.Count),
                             MatchedToken: string.Join(" ", qTokens),
                             Context: ctx));
 
@@ -113,7 +113,7 @@ public static class PdfHitFinder
                         
                         hits.Add(new PdfHit(++hitIndex, page.Number,
                             new[] { ToAvaloniaRect(word.BoundingBox) },
-                            Score: 2.0f,
+                            Score: 2.0f + EarlyBonus(page.Number, startIdx) + TokenRarityBonus(q),
                             MatchedToken: q,
                             Context: ctx));
                         continue;
@@ -167,5 +167,35 @@ public static class PdfHitFinder
         return s;
     }
 
-    
+    private static float EarlyBonus(int pageNumber, int wordIndexOnPage)
+    {
+        // Tidlige sider prioriteres hårdere end senere sider
+        // Side 1 får +1.0, side 2 +0.6, side 3 +0.4, ...
+        var pageBoost = 1.0f / (1.0f + (pageNumber - 1) * 0.7f);
+
+        // Tidlige ord på siden boostes let
+        // wordIndexOnPage 0 => +0.5, 50 => ~0.1
+        var posBoost = 0.5f / (1.0f + wordIndexOnPage / 20.0f);
+
+        return pageBoost + posBoost;
+    }
+
+    private static float PhraseLengthBonus(int tokenCount)
+    {
+        // længere fraser er mere specifikke => højere score
+        // 2 tokens => +0.2, 3 => +0.4, 4 => +0.6 ...
+        return 0.2f * Math.Max(0, tokenCount - 1);
+    }
+
+    private static float TokenRarityBonus(string token)
+    {
+        // Meget simpel rarity proxy uden at hente IDF:
+        // Lange tokens er ofte mere specifikke, korte er mere støj
+        if (string.IsNullOrWhiteSpace(token)) return 0f;
+        token = token.Trim();
+        if (token.Length >= 10) return 0.6f;
+        if (token.Length >= 6) return 0.3f;
+        return 0.0f;
+    }
+
 }

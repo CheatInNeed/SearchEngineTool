@@ -26,25 +26,19 @@ public class IndexedSearchService
 
     private readonly LuceneIndexService _luceneIndexService;
     private readonly LuceneSearchService _luceneSearchService;
+    private readonly LuceneStatsService _luceneStatsService;
     
     private readonly SemaphoreSlim _indexLock = new SemaphoreSlim(1, 1);
 
     public IndexedSearchService()
     {
-        // Default analyzer (normal)
-        var standard = new StandardAnalyzer(LuceneVersion.LUCENE_48, CharArraySet.EMPTY_SET);
-
-        // Infix analyzer ONLY for "contentInfix"
-        var perField = new Dictionary<string, Analyzer>
-        {
-            { "contentInfix", new FileSearchTool.Services.Lucene.InfixNGramAnalyzer(LuceneVersion.LUCENE_48, 3, 15) }
-        };
-
-        _analyzer = new PerFieldAnalyzerWrapper(standard, perField);
+        _analyzer = AnalyzerFactory.Create(LuceneVersion.LUCENE_48);
 
         _luceneIndexService = new LuceneIndexService(_indexPaths, _analyzer);
         _luceneSearchService = new LuceneSearchService(_indexPaths, _analyzer);
+        _luceneStatsService = new LuceneStatsService(_indexPaths, _analyzer);
     }
+
     
     // We use this to know if rootFolder already exists.
     private string? _indexedRootFolder;
@@ -121,7 +115,19 @@ public class IndexedSearchService
 
         var hits = _luceneSearchService.Search(rootFolder, query);
 
-        foreach (var (path, score, storedContent) in hits)
+        // Load LTR-light model (optional)
+        var resourcesDir = Path.Combine(AppContext.BaseDirectory, "Resources");
+        var modelPath = Path.Combine(resourcesDir, "ltr_weights.json");
+        var model = FileSearchTool.Services.Ranking.LinearModel.TryLoad(modelPath);
+
+        // Analyser query tokens med samme normalisering som rerank (enkelt, men OK)
+        var qTokens = FileSearchTool.Services.Ranking.QueryTextUtil.Tokenize(query)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var (N, dfByTerm) = _luceneStatsService.GetDocFreqs(rootFolder, qTokens, field: "content");
+        
+        foreach (var (path, luceneScore, storedContent, ext, ticks, size, depth, hash) in hits)
         {
             try
             {
@@ -171,63 +177,89 @@ public class IndexedSearchService
         _indexedRootFolder = rootFolder;
     }
 
-    // Lucene top docs
-    var hits = _luceneSearchService.Search(rootFolder, query);
+    // === Stage 1: Retrieval (top 200) ===
+    var hits = _luceneSearchService.Search(rootFolder, query, topN: 200);
+    
+    // Load LTR-light model (optional)
+    var resourcesDir = Path.Combine(AppContext.BaseDirectory, "Resources");
+    var modelPath = Path.Combine(resourcesDir, "ltr_weights.json");
+    var model = FileSearchTool.Services.Ranking.LinearModel.TryLoad(modelPath);
 
-    foreach (var (path, score, storedContent) in hits)
+        // Query tokens (samme som rerank bruger)
+    var qTokens = FileSearchTool.Services.Ranking.QueryTextUtil.Tokenize(query)
+        .Distinct(StringComparer.Ordinal)
+        .ToList();
+
+        // DocFreq stats til IDF approx
+    var (N, dfByTerm) = _luceneStatsService.GetDocFreqs(rootFolder, qTokens, field: "content");
+
+
+    // === Stage 2: Re-rank (top 200 -> sort by FinalScore -> take 50) ===
+    var scored = new List<SearchResultSummary>(hits.Count);
+
+    // Hvis du udvider SearchResultSummary til at bære hash senere, så group på hash.
+    // Lige nu kan du i stedet collapse på "path" (ingen effekt) – bedst at udvide summary med hash.
+    foreach (var (path, luceneScore, storedContent, ext, ticks, size, depth, hash) in hits)
     {
         try
         {
-            // Kun 1 entry pr dokument:
-            int phrase = 0, exact = 0, infix = 0;
+            // Use storedContent if present; else fallback extract (slower)
+            string text = !string.IsNullOrWhiteSpace(storedContent)
+                ? storedContent!
+                : TextExtractorFactory.Create(path).ExtractText(path);
 
-            // PDFs: brug PdfHitFinder, fordi du alligevel skal bruge hits i preview
-            if (string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
-            {
-                var pdfHits = FileSearchTool.Services.PdfPreview.PdfHitFinder.FindAllHits(path, query);
+            var breakdown = FileSearchTool.Services.Ranking.ReRankScorer
+                .ScoreDocument(query, luceneScore, text, ext, ticks, depth, N, dfByTerm, model);
 
-                // PdfHitFinder scores: 3 phrase, 2 exact, 1 infix (som du har i koden)
-                phrase = pdfHits.Count(h => Math.Abs(h.Score - 3.0f) < 0.001f);
-                exact  = pdfHits.Count(h => Math.Abs(h.Score - 2.0f) < 0.001f);
-                infix  = pdfHits.Count(h => Math.Abs(h.Score - 1.0f) < 0.001f);
-            }
-            else
-            {
-                // Ikke-PDF: lav en simpel count via tekst (hurtig og stabil)
-                string text = !string.IsNullOrWhiteSpace(storedContent)
-                    ? storedContent!
-                    : TextExtractorFactory.Create(path).ExtractText(path);
 
-                var q = query.Trim();
-                var tokens = q.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                              .Distinct(StringComparer.OrdinalIgnoreCase)
-                              .ToList();
-
-                if (tokens.Count >= 2 && text.Contains(q, StringComparison.OrdinalIgnoreCase))
-                    phrase = 1; // “mindst én phrase” (kan udvides senere)
-
-                foreach (var t in tokens)
-                {
-                    if (text.Contains(t, StringComparison.OrdinalIgnoreCase))
-                        exact++;
-                }
-            }
-
-            // TotalScore: primært Lucene score, men du kan “hjælpe” sortering lidt med counts
-            float total = score + (phrase * 12f) + (exact * 6f) + (infix * 2.5f);
-
-            results.Add(new SearchResultSummary(path, total, phrase, exact, infix));
+            scored.Add(new SearchResultSummary(
+                FilePath: path,
+                FinalScore: breakdown.FinalScore,
+                LuceneScore: breakdown.LuceneScore,
+                ProximityScore: breakdown.ProximityScore,
+                PhraseBonus: breakdown.PhraseBonus,
+                DensityScore: breakdown.DensityScore,
+                AllTermsBonus: breakdown.AllTermsBonus,
+                SpanLength: breakdown.SpanLength,
+                MatchedDistinctTerms: breakdown.MatchedDistinctTerms,
+                ContainsAllTerms: breakdown.ContainsAllTerms,
+                FreshnessScore: breakdown.FreshnessScore,
+                FiletypeScore: breakdown.FiletypeScore,
+                FolderDepthScore: breakdown.FolderDepthScore,
+                EarlyScore: breakdown.EarlyScore,
+                CoverageScore: breakdown.CoverageScore,
+                SubPhraseBonus: breakdown.SubPhraseBonus
+            ));
         }
         catch
         {
-            // swallow per doc
+            // If re-rank fails for a doc, keep Lucene baseline (don’t drop result)
+            scored.Add(new SearchResultSummary(
+                FilePath: path,
+                FinalScore: luceneScore,
+                LuceneScore: luceneScore,
+                ProximityScore: 0,
+                PhraseBonus: 0,
+                DensityScore: 0,
+                AllTermsBonus: 0,
+                SpanLength: FileSearchTool.Services.Ranking.RankingWeights.MinSpanFallback,
+                MatchedDistinctTerms: 0,
+                ContainsAllTerms: false,
+                FreshnessScore: 0,
+                FiletypeScore: 0,
+                FolderDepthScore: 0,
+                EarlyScore: 0,
+                CoverageScore: 0,
+                SubPhraseBonus: 0
+            ));
         }
     }
 
-    // Sortér så “bedste” er øverst
-    return results
-        .OrderByDescending(r => r.TotalScore)
+    return scored
+        .OrderByDescending(x => x.FinalScore)
+        .Take(50)
         .ToList();
 }
+
 
 }
