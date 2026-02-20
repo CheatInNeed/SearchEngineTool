@@ -1,31 +1,98 @@
-# SearchEngineTool
+# FileSearchTool
 
-SearchEngineTool is a cross-platform desktop application for advanced full-text search across files and folders.
+A desktop search engine built with C#, Lucene.NET and Avalonia UI.
 
-The project is built as a learning and portfolio project with focus on:
-- Desktop application development
-- Cross-platform .NET (macOS & Windows)
-- File indexing and search algorithms
-- Clean architecture and maintainable code
+This project implements a two-stage retrieval + re-ranking architecture,
+including proximity scoring, phrase detection, metadata boosting, and PDF hit visualization.
 
-## Features (planned)
-- Search across multiple files and folders
-- Phrase search with AND / OR fallback
-- Project-based search scopes
-- Drag & drop file and folder support
-- Result previews with highlighted matches
+---
 
-## Tech Stack
-- C# / .NET
-- Avalonia UI
-- (Planned) Lucene.NET for indexing
-- SQLite for local metadata storage
+## 🔍 What the program can do
 
-## Status
-Work in progress – early development stage.
+### 📂 Indexing
+- Recursive folder indexing
+- Incremental indexing (skips unchanged files)
+- Automatic removal of deleted files
+- Supported file types:
+    - `.pdf`
+    - `.txt`
+- Per-folder Lucene index stored in AppData
 
-## Author
-Created and maintained by **Peter Roland Bøttcher Jensen** aka CheatInNeed
+---
 
-## License
-This project is licensed under the MIT License – see the LICENSE file for details.
+### 🔎 Retrieval (Stage 1 – Lucene)
+- Fielded search across:
+    - title
+    - filename
+    - content
+- Exact phrase boosting
+- Loose phrase boosting
+- All-terms match boosting
+- Token matching with minimum-should-match
+- Infix n-gram search (substring matching)
+- Synonym support (via synonyms.txt)
+- English + Danish stopwords
+- English + Danish stemming (Snowball)
+
+---
+
+### 🧠 Re-Ranking (Stage 2 – Custom Scoring)
+
+Each document is re-scored using:
+
+- Lucene score
+- Proximity scoring (window-based)
+- Exact phrase bonus
+- Near phrase bonus
+- Sub-phrase bonus (phrase inside phrase)
+- Density scoring
+- All-terms bonus
+- IDF-based coverage score
+- Early-position boost
+- Freshness boost
+- Filetype prior
+- Folder depth prior
+- Optional linear LTR-style weight model
+
+Final results are sorted by `FinalScore`.
+
+---
+
+### 📄 Snippet Generation
+- Multi-snippet per document
+- Cluster-based snippet extraction
+- Phrase highlighting
+- Whole-word highlighting
+- Infix highlighting
+
+---
+
+### 📑 PDF Preview
+- Renders PDF pages
+- Finds phrase + token hits
+- Scores hits individually
+- Sidebar sorted by best hit
+- Highlight overlay with active hit emphasis
+- Zoom support
+- Hit navigation
+- Page navigation
+
+---
+
+### 📊 Debug / Transparency
+Each result exposes:
+
+- LuceneScore
+- ProximityScore
+- PhraseBonus
+- SubPhraseBonus
+- DensityScore
+- AllTermsBonus
+- FreshnessScore
+- FiletypeScore
+- FolderDepthScore
+- EarlyScore
+- CoverageScore
+- FinalScore
+
+This makes ranking behavior explainable and tunable.
