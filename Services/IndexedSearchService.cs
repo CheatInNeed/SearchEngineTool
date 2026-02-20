@@ -227,7 +227,8 @@ public class IndexedSearchService
                 FiletypeScore: breakdown.FiletypeScore,
                 FolderDepthScore: breakdown.FolderDepthScore,
                 EarlyScore: breakdown.EarlyScore,
-                CoverageScore: breakdown.CoverageScore
+                CoverageScore: breakdown.CoverageScore,
+                SubPhraseBonus: breakdown.SubPhraseBonus
             ));
         }
         catch
@@ -248,7 +249,8 @@ public class IndexedSearchService
                 FiletypeScore: 0,
                 FolderDepthScore: 0,
                 EarlyScore: 0,
-                CoverageScore: 0
+                CoverageScore: 0,
+                SubPhraseBonus: 0
             ));
         }
     }

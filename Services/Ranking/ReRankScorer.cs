@@ -9,6 +9,7 @@ public sealed class ReRankBreakdown
     public float LuceneScore { get; }
     public float ProximityScore { get; }
     public float PhraseBonus { get; }
+    public float SubPhraseBonus { get; }
     public float DensityScore { get; }
     public float AllTermsBonus { get; }
     public float FinalScore { get; }
@@ -25,6 +26,7 @@ public sealed class ReRankBreakdown
         float luceneScore,
         float proximityScore,
         float phraseBonus,
+        float subPhraseBonus,
         float densityScore,
         float allTermsBonus,
         float finalScore,
@@ -40,6 +42,7 @@ public sealed class ReRankBreakdown
         LuceneScore = luceneScore;
         ProximityScore = proximityScore;
         PhraseBonus = phraseBonus;
+        SubPhraseBonus = subPhraseBonus;
         DensityScore = densityScore;
         AllTermsBonus = allTermsBonus;
         FinalScore = finalScore;
@@ -77,7 +80,11 @@ public static class ReRankScorer
         {
             return new ReRankBreakdown(
                 luceneScore,
-                0f, 0f, 0f, 0f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f,
                 luceneScore,
                 RankingWeights.MinSpanFallback,
                 0,
@@ -95,7 +102,11 @@ public static class ReRankScorer
         {
             return new ReRankBreakdown(
                 luceneScore,
-                0f, 0f, 0f, 0f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f,
                 luceneScore,
                 RankingWeights.MinSpanFallback,
                 0,
@@ -115,6 +126,7 @@ public static class ReRankScorer
                 luceneScore,
                 0f,
                 phraseBonus0,
+                0f,          // subPhraseBonus (ingen for single-token mode)
                 0f,
                 allTermsBonus0,
                 final0,
@@ -190,6 +202,9 @@ public static class ReRankScorer
         {
             phraseBonus += RankingWeights.NearPhraseBonus;
         }
+        // Sub-phrase bonus: boost query bigrams/trigrams (phrase inside phrase)
+        // Example: "process control block pcb" should still reward "process control block"
+        float subPhraseBonus = ComputeSubPhraseBonus(normText, qTokens);
 
         // Density score: (matchedDistinctTerms / spanLength) * β
         float densityScore = 0f;
@@ -212,7 +227,7 @@ public static class ReRankScorer
         {
             LuceneScore = luceneScore,
             ProximityScore = proximityScore,
-            PhraseBonus = phraseBonus,
+            PhraseBonus = phraseBonus + subPhraseBonus,
             DensityScore = densityScore,
             AllTermsBonus = allTermsBonus,
 
@@ -226,7 +241,7 @@ public static class ReRankScorer
 
         float finalScore = model != null
             ? model.Score(fv)
-            : (luceneScore + proximityScore + phraseBonus + densityScore + allTermsBonus
+            : (luceneScore + proximityScore + (phraseBonus + subPhraseBonus) + densityScore + allTermsBonus
                + freshnessScore + filetypeScore + folderDepthScore
                + earlyScore + coverageScore);
 
@@ -235,6 +250,7 @@ public static class ReRankScorer
             luceneScore,
             proximityScore,
             phraseBonus,
+            subPhraseBonus,
             densityScore,
             allTermsBonus,
             finalScore,
@@ -264,4 +280,35 @@ public static class ReRankScorer
         var phrase = string.Join(' ', qTokens);
         return normText.Contains(phrase, StringComparison.Ordinal);
     }
+    
+    private static float ComputeSubPhraseBonus(string normText, List<string> qTokens)
+    {
+        // Boost for query sub-phrases (bigrams/trigrams)
+        // Example: "process control block pcb" rewards "process control block"
+        if (qTokens.Count < 3) return 0f;
+
+        const float trigramBoost = 2.5f; // strong
+        const float bigramBoost = 1.2f;  // mild
+
+        float bonus = 0f;
+
+        // 3-grams
+        for (int i = 0; i <= qTokens.Count - 3; i++)
+        {
+            var tri = $"{qTokens[i]} {qTokens[i + 1]} {qTokens[i + 2]}";
+            if (normText.Contains(tri, StringComparison.Ordinal))
+                bonus += trigramBoost;
+        }
+
+        // 2-grams
+        for (int i = 0; i <= qTokens.Count - 2; i++)
+        {
+            var bi = $"{qTokens[i]} {qTokens[i + 1]}";
+            if (normText.Contains(bi, StringComparison.Ordinal))
+                bonus += bigramBoost;
+        }
+
+        return bonus;
+    }
+
 }
