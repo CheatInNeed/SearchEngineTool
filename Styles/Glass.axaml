@@ -18,7 +18,8 @@
     <CornerRadius x:Key="GlassRadiusMd">12</CornerRadius>
 
     <!-- Baggrund (app window) -->
-    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0F0F13"/>
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#00000000"/>
+    <SolidColorBrush x:Key="AppWindowTintBrush" Color="#22000000"/>
 
     <SolidColorBrush x:Key="GlassSurfaceBrush" Color="{DynamicResource GlassSurfaceColor}" />
     <SolidColorBrush x:Key="GlassSurfaceBrushStrong" Color="{DynamicResource GlassSurfaceColorStrong}" />
