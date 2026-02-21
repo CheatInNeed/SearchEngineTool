@@ -109,6 +109,49 @@
   <Style Selector="TextBox.GlassTextBoxDark:focus">
     <Setter Property="BorderBrush" Value="#66A7FF"/>
   </Style>
+  
+  <!-- Force dark background even when focused (Fluent likes to brighten inputs) -->
+  <Style Selector="TextBox.GlassTextBox:focus">
+    <Setter Property="Background" Value="#14FFFFFF"/>
+    <Setter Property="BorderBrush" Value="#88A7FF"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBoxDark:focus">
+    <Setter Property="Background" Value="#22000000"/>
+    <Setter Property="BorderBrush" Value="#66A7FF"/>
+  </Style>
+  
+  <!-- FIX: Fluent/TextBox template sætter ofte egen focused background på PART_BorderElement -->
+  <Style Selector="TextBox.GlassTextBox /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="#14FFFFFF"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="#14FFFFFF"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBoxDark /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="#22000000"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBoxDark:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="#22000000"/>
+  </Style>
+
+  <!-- (Optional) hvis TextPresenter/ScrollViewer også “lyser op” i din theme-version -->
+  <Style Selector="TextBox.GlassTextBox /template/ ScrollViewer#PART_ScrollViewer">
+    <Setter Property="Background" Value="#00000000"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBoxDark /template/ ScrollViewer#PART_ScrollViewer">
+    <Setter Property="Background" Value="#00000000"/>
+  </Style>
+
+  <!-- Also handle pointerover so it doesn't look "washed" -->
+  <Style Selector="TextBox.GlassTextBoxDark:pointerover">
+    <Setter Property="Background" Value="#26000000"/>
+    <Setter Property="BorderBrush" Value="#44FFFFFF"/>
+  </Style>
 
   <!-- ========== LISTBOX ========== -->
   <Style Selector="ListBox.GlassList">
