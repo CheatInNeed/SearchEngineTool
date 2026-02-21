@@ -31,7 +31,7 @@ public partial class PdfPreviewViewModel : ObservableObject
     
     [ObservableProperty] private PdfSidebarItem? selectedSidebarItem;
     
-    [ObservableProperty] private float zoom = 1.8f;
+    [ObservableProperty] private float zoom = 1.0f;
 
     // Pixel-størrelse (til overlay canvas)
     [ObservableProperty] private double pagePixelWidth;
