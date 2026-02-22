@@ -211,7 +211,7 @@ public static class PdfHitFinder
             }
 
         }
-
+        hits = CollapseOverlappingHits(hits);
         return hits;
     }
 
@@ -304,4 +304,93 @@ public static class PdfHitFinder
 
         return p;
     }
+    
+    private static List<PdfHit> CollapseOverlappingHits(List<PdfHit> hits)
+{
+    if (hits.Count <= 1) return hits;
+
+    // Sortér: bedste først (høj score), så længere match (flere ord), så lavere page
+    var ordered = hits
+        .OrderByDescending(h => h.Score)
+        .ThenByDescending(h => TokenCount(h.MatchedToken))
+        .ThenBy(h => h.PageNumber)
+        .ToList();
+
+    var kept = new List<PdfHit>();
+
+    foreach (var h in ordered)
+    {
+        bool overlaps = false;
+
+        foreach (var k in kept)
+        {
+            if (h.PageNumber != k.PageNumber) continue;
+
+            // Hvis hit-bounds overlapper meget, så er det samme “sted” i teksten
+            var a = Bounds(h);
+            var b = Bounds(k);
+
+            if (OverlapRatio(a, b) >= 0.45) // tune 0.35–0.60
+            {
+                overlaps = true;
+                break;
+            }
+        }
+
+        if (!overlaps)
+            kept.Add(h);
+    }
+
+    // Bevar original HitIndex rækkefølge-indekser er ikke vigtig her,
+    // PdfPreviewViewModel sorterer alligevel på Score.
+    return kept;
+}
+
+private static int TokenCount(string s)
+{
+    if (string.IsNullOrWhiteSpace(s)) return 0;
+    return s.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+}
+
+private static Rect Bounds(PdfHit h)
+{
+    if (h.Boxes == null || h.Boxes.Length == 0)
+        return new Rect(0, 0, 0, 0);
+
+    double left = h.Boxes[0].X;
+    double top = h.Boxes[0].Y;
+    double right = h.Boxes[0].X + h.Boxes[0].Width;
+    double bottom = h.Boxes[0].Y + h.Boxes[0].Height;
+
+    foreach (var r in h.Boxes)
+    {
+        left = Math.Min(left, r.X);
+        top = Math.Min(top, r.Y);
+        right = Math.Max(right, r.X + r.Width);
+        bottom = Math.Max(bottom, r.Y + r.Height);
+    }
+
+    return new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+}
+
+// overlap ratio = intersection area / min(areaA, areaB)
+// => “hvor meget dækker de samme område”
+private static double OverlapRatio(Rect a, Rect b)
+{
+    var ix1 = Math.Max(a.X, b.X);
+    var iy1 = Math.Max(a.Y, b.Y);
+    var ix2 = Math.Min(a.X + a.Width, b.X + b.Width);
+    var iy2 = Math.Min(a.Y + a.Height, b.Y + b.Height);
+
+    var iw = Math.Max(0, ix2 - ix1);
+    var ih = Math.Max(0, iy2 - iy1);
+    var inter = iw * ih;
+
+    var areaA = a.Width * a.Height;
+    var areaB = b.Width * b.Height;
+
+    if (areaA <= 0 || areaB <= 0) return 0;
+
+    return inter / Math.Min(areaA, areaB);
+}
 }
