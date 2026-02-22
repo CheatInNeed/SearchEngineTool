@@ -10,6 +10,8 @@ using FileSearchTool.Models;
 using FileSearchTool.Services.PdfPreview;
 using UglyToad.PdfPig;
 using System.Collections.ObjectModel;
+using FileSearchTool.Services.Lucene;
+using Lucene.Net.Util;
 
 namespace FileSearchTool.ViewModels;
 
@@ -94,7 +96,10 @@ public partial class PdfPreviewViewModel : ObservableObject
     {
         _pdfPath = pdfPath;
 
-        _hits = PdfHitFinder.FindAllHits(pdfPath, rawQuery);
+        var analyzedTokens = new LuceneQueryBuilder(AnalyzerFactory.Create(LuceneVersion.LUCENE_48))
+            .AnalyzeQueryTerms(rawQuery);
+
+        _hits = PdfHitFinder.FindAllHits(pdfPath, rawQuery, analyzedTokens);
         
         _hits.Sort((a, b) =>
         {

@@ -121,6 +121,11 @@ public class IndexedSearchService
         }
 
         var hits = _luceneSearchService.Search(rootFolder, query);
+        
+        hits = hits
+            .GroupBy(h => h.path, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(x => x.score).First())
+            .ToList();
 
         // Load LTR-light model (optional)
         var resourcesDir = Path.Combine(AppContext.BaseDirectory, "Resources");
@@ -149,12 +154,8 @@ public class IndexedSearchService
                     text = extractor.ExtractText(path);
                 }
 
-                var tokens = query
-                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                var snippets = SnippetMaker.MakeSnippets(text, query, tokens);
+                var analyzedTokens = new LuceneQueryBuilder(_analyzer).AnalyzeQueryTerms(query);
+                var snippets = SnippetMaker.MakeSnippets(text, query, analyzedTokens);
 
                 for (int i = 0; i < snippets.Count; i++)
                 {
@@ -192,13 +193,12 @@ public class IndexedSearchService
     var modelPath = Path.Combine(resourcesDir, "ltr_weights.json");
     var model = FileSearchTool.Services.Ranking.LinearModel.TryLoad(modelPath);
 
-        // Query tokens (samme som rerank bruger)
-    var qTokens = FileSearchTool.Services.Ranking.QueryTextUtil.Tokenize(query)
-        .Distinct(StringComparer.Ordinal)
-        .ToList();
+    // Query tokens (samme som rerank bruger)
+    var analyzedTokens = new FileSearchTool.Services.Lucene.LuceneQueryBuilder(_analyzer)
+        .AnalyzeQueryTerms(query);
 
         // DocFreq stats til IDF approx
-    var (N, dfByTerm) = _luceneStatsService.GetDocFreqs(rootFolder, qTokens, field: "content");
+    var (N, dfByTerm) = _luceneStatsService.GetDocFreqs(rootFolder, analyzedTokens, field: "content");
 
 
     // === Stage 2: Re-rank (top 200 -> sort by FinalScore -> take 50) ===
@@ -216,7 +216,7 @@ public class IndexedSearchService
                 : TextExtractorFactory.Create(path).ExtractText(path);
 
             var breakdown = FileSearchTool.Services.Ranking.ReRankScorer
-                .ScoreDocument(query, luceneScore, text, ext, ticks, depth, N, dfByTerm, model);
+                .ScoreDocument(query, analyzedTokens, luceneScore, text, ext, ticks, depth, N, dfByTerm, model);
 
 
             scored.Add(new SearchResultSummary(
@@ -263,6 +263,8 @@ public class IndexedSearchService
     }
 
     return scored
+        .GroupBy(x => x.FilePath, StringComparer.OrdinalIgnoreCase)
+        .Select(g => g.OrderByDescending(x => x.FinalScore).First())
         .OrderByDescending(x => x.FinalScore)
         .Take(50)
         .ToList();

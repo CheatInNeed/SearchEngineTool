@@ -62,16 +62,18 @@ public static class ReRankScorer
 {
     public static ReRankBreakdown ScoreDocument(
         string rawQuery,
+        IReadOnlyList<string> analyzedTokens,
         float luceneScore,
         string? storedContent,
         string ext,
         long lastModifiedTicks,
         int folderDepth,
         int corpusN,
-        System.Collections.Generic.Dictionary<string,int> dfByTerm,
+        Dictionary<string,int> dfByTerm,
         LinearModel? model)
     {
-        var qTokens = QueryTextUtil.Tokenize(rawQuery)
+        var qTokens = analyzedTokens
+            .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct(StringComparer.Ordinal)
             .ToList();
 

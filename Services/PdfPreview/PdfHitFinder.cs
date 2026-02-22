@@ -22,7 +22,7 @@ public static class PdfHitFinder
         return s;
     }
 
-    public static List<PdfHit> FindAllHits(string pdfPath, string rawQuery)
+    public static List<PdfHit> FindAllHits(string pdfPath, string rawQuery, IEnumerable<string>? extraTokens = null)
     {
         var hits = new List<PdfHit>();
         if (string.IsNullOrWhiteSpace(pdfPath) || string.IsNullOrWhiteSpace(rawQuery))
@@ -30,6 +30,15 @@ public static class PdfHitFinder
 
         var qNorm = Norm(rawQuery);
         var qTokens = qNorm.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        
+        if (extraTokens != null)
+        {
+            qTokens.AddRange(extraTokens
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => Norm(x)));
+            qTokens = qTokens.Distinct(StringComparer.Ordinal).ToList();
+        }
+        
         var hasPhrase = qTokens.Count >= 2;
         
         // Sub-phrases fra query (bigrams/trigrams) – i rækkefølge

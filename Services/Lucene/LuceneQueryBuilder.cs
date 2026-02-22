@@ -150,6 +150,19 @@ public class LuceneQueryBuilder
 
         return root;
     }
+    
+    public List<string> AnalyzeQueryTerms(string rawQuery)
+    {
+        if (string.IsNullOrWhiteSpace(rawQuery)) return new List<string>();
+
+        var normalized = NormalizeForQuery(NormalizeWhitespace(rawQuery));
+
+        // Brug content-field så vi rammer samme pipeline som retrieval
+        return AnalyzeToTerms(FieldContent, normalized)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
     private static int ComputeMinShouldMatch(int tokenCount)
     {
