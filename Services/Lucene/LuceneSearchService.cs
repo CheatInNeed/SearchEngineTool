@@ -19,6 +19,8 @@ public class LuceneSearchService
     private const string FieldFileSizeBytes = "fileSizeBytes";
     private const string FieldFolderDepth = "folderDepth";
     private const string FieldContentHash = "contentHash";
+    private const string FieldParentPath = "parentPath";
+    private const string FieldChunkIndex = "chunkIndex";
 
 
     private readonly LuceneIndexPaths _indexPaths;
@@ -75,7 +77,10 @@ public class LuceneSearchService
             {
                 var doc = searcher.Doc(sd.Doc);
 
-                var path = doc.Get(FieldPath);
+                var parentPath = doc.Get(FieldParentPath);
+                var path = string.IsNullOrWhiteSpace(parentPath) ? doc.Get(FieldPath) : parentPath;
+                var chunkField = doc.GetField(FieldChunkIndex);
+                var chunkIndex = chunkField?.GetInt32Value() ?? 0;
                 if (string.IsNullOrWhiteSpace(path))
                     continue;
 

@@ -29,6 +29,9 @@ public class LuceneIndexService
     private const string FieldFolderDepth = "folderDepth";
     private const string FieldFolderDepthDv = "folderDepth_dv";
     private const string FieldContentHash = "contentHash";
+    private const string FieldDocId = "docId";
+    private const string FieldParentPath = "parentPath";
+    private const string FieldChunkIndex = "chunkIndex";
 
     private readonly LuceneIndexPaths _indexPaths;
     private readonly Analyzer _analyzer;
@@ -81,7 +84,7 @@ public class LuceneIndexService
     /// Builds or updates the Lucene index for a given root folder.
     /// Incremental update: skips files where lastModifiedTicks is unchanged.
     /// </summary>
-    public Task BuildOrUpdateIndexAsync(string rootFolder, IEnumerable<(string path, string content)> docs)
+    public Task BuildOrUpdateIndexAsync(string rootFolder, IEnumerable<(string path, string content, int chunkIndex)> docs)
     {
         return Task.Run(() =>
         {
@@ -106,82 +109,82 @@ public class LuceneIndexService
 
             var changed = false;
 
-            foreach (var (path, content) in docs)
+            foreach (var group in docs.GroupBy(d => d.path, StringComparer.OrdinalIgnoreCase))
             {
-                if (string.IsNullOrWhiteSpace(path)) continue;
-                if (content == null) continue;
+                var path = group.Key;
 
+                long currentTicks = 0;
+                try { currentTicks = File.GetLastWriteTimeUtc(path).Ticks; } catch { }
+
+                if (existingTicksByPath.TryGetValue(path, out var oldTicks) && oldTicks == currentTicks)
+                    continue;
+
+                long fileSizeBytes = 0;
+                try { fileSizeBytes = new FileInfo(path).Length; } catch { }
+
+                int folderDepth = 0;
                 try
                 {
-                    // last modified
-                    long currentTicks = 0;
-                    try { currentTicks = File.GetLastWriteTimeUtc(path).Ticks; } catch { /* ignore */ }
+                    var rel = Path.GetRelativePath(rootFolder, path);
+                    folderDepth = rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                        .Count(x => !string.IsNullOrWhiteSpace(x)) - 1;
+                    if (folderDepth < 0) folderDepth = 0;
+                }
+                catch { }
 
-                    // incremental skip (hvis vi har ticks i index)
-                    if (existingTicksByPath.TryGetValue(path, out var oldTicks) && oldTicks == currentTicks)
-                        continue;
+                var contentHash = "";
+                try
+                {
+                    // Hash af hele filens chunks samlet (stabilt nok til nu)
+                    var allText = string.Join("\n", group.OrderBy(x => x.chunkIndex).Select(x => x.content));
+                    contentHash = ComputeSha1(allText);
+                }
+                catch { }
+                
+                // SLET gamle chunks for filen, ellers får du stale chunks hængende
+                writer.DeleteDocuments(new Term(FieldPath, path));
 
-                    // filename / title / ext
-                    var fileName = Path.GetFileName(path);
-                    var title = Path.GetFileNameWithoutExtension(path);
-                    var ext = Path.GetExtension(path) ?? "";
+                // Indeksér ALLE chunks for filen
+                foreach (var (p, content, chunkIndex) in group.OrderBy(x => x.chunkIndex))
+                {
+                    if (string.IsNullOrWhiteSpace(p)) continue;
+                    if (content == null) continue;
 
-                    // file size
-                    long fileSizeBytes = 0;
-                    try
-                    {
-                        if (File.Exists(path))
-                            fileSizeBytes = new FileInfo(path).Length;
-                    }
-                    catch { /* ignore */ }
+                    var fileName = Path.GetFileName(p);
+                    var title = Path.GetFileNameWithoutExtension(p);
+                    var ext = Path.GetExtension(p) ?? "";
 
-                    // folder depth relativt til rootFolder
-                    int folderDepth = 0;
-                    try
-                    {
-                        var rel = Path.GetRelativePath(rootFolder, path);
-                        folderDepth = rel.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar);
-                    }
-                    catch { /* ignore */ }
-
-                    var normalized = NormalizeForIndex(content);
-                    var contentHash = ComputeSha1(normalized);
+                    var normalizedChunk = NormalizeForIndex(content);
+                    var docId = $"{p}::{chunkIndex}";
 
                     var doc = new Document
                     {
-                        new StringField(FieldPath, path, Field.Store.YES),
+                        new StringField(FieldPath, p, Field.Store.YES),
+                        new StringField(FieldDocId, docId, Field.Store.YES),
+                        new StringField(FieldParentPath, path, Field.Store.YES),
+                        new StoredField(FieldChunkIndex, chunkIndex),
 
                         new TextField(FieldTitle, title, Field.Store.YES),
                         new TextField(FieldFilename, fileName, Field.Store.YES),
 
-                        new TextField(FieldContent, normalized, Field.Store.NO),
-                        new TextField(FieldContentInfix, normalized, Field.Store.NO),
+                        new TextField(FieldContent, normalizedChunk, Field.Store.NO),
+                        new TextField(FieldContentInfix, normalizedChunk, Field.Store.NO),
 
                         new StoredField(FieldContentStored, content),
                         new StringField(FieldExt, ext, Field.Store.YES),
 
-                        // Stored + DocValues til rerank
                         new StoredField(FieldLastModifiedTicks, currentTicks),
-                        new NumericDocValuesField(FieldLastModifiedTicksDv, currentTicks),
-
+                        
                         new StoredField(FieldFileSizeBytes, fileSizeBytes),
-                        new NumericDocValuesField(FieldFileSizeBytesDv, fileSizeBytes),
-
                         new StoredField(FieldFolderDepth, folderDepth),
-                        new NumericDocValuesField(FieldFolderDepthDv, folderDepth),
-
-                        // Dedup/collapse support
                         new StringField(FieldContentHash, contentHash, Field.Store.YES),
                     };
 
-                    writer.UpdateDocument(new Term(FieldPath, path), doc);
-                    existingTicksByPath[path] = currentTicks;
-                    changed = true;
+                    writer.AddDocument(doc);
                 }
-                catch
-                {
-                    // One bad file must not break entire indexing
-                }
+
+                existingTicksByPath[path] = currentTicks;
+                changed = true;
             }
 
 
@@ -213,6 +216,11 @@ public class LuceneIndexService
 
                 var path = doc.Get(FieldPath);
                 if (string.IsNullOrWhiteSpace(path))
+                    continue;
+                
+                var chunkField = doc.GetField(FieldChunkIndex);
+                var chunkIndex = chunkField?.GetInt32Value() ?? -1;
+                if (chunkIndex != 0)
                     continue;
 
                 long ticks = 0L;

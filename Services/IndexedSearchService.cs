@@ -59,7 +59,7 @@ public class IndexedSearchService
                 ? _luceneIndexService.GetIndexedLastModifiedTicks(rootFolder)
                 : new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
-            var docs = new List<(string path, string content)>();
+            var docs = new List<(string path, string content, int chunkIndex)>();
 
             foreach (var file in files)
             {
@@ -75,7 +75,14 @@ public class IndexedSearchService
                     var text = extractor.ExtractText(file);
 
                     if (!string.IsNullOrWhiteSpace(text))
-                        docs.Add((file, text));
+                    {
+                        var chunks = TextChunker.ToChunks(text, targetChars: 1200, overlapChars: 150);
+
+                        for (int i = 0; i < chunks.Count; i++)
+                        {
+                            docs.Add((path: file, content: chunks[i], chunkIndex: i));
+                        }
+                    }
                 }
                 catch
                 {
