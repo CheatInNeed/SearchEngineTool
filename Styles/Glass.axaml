@@ -1,0 +1,192 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <Styles.Resources>
+    <!-- ========== TOKENS (justér her) ========== -->
+    <Color x:Key="GlassSurfaceColor">#1AFFFFFF</Color>          <!-- 10% -->
+    <Color x:Key="GlassSurfaceColorStrong">#24FFFFFF</Color>    <!-- 14% -->
+    <Color x:Key="GlassBorderColor">#2CFFFFFF</Color>
+    <Color x:Key="GlassBorderColorStrong">#3DFFFFFF</Color>
+
+    <Color x:Key="GlassTextColor">#F2FFFFFF</Color>
+    <Color x:Key="GlassTextMutedColor">#CCFFFFFF</Color>
+
+    <Color x:Key="GlassAccentColor">#66A7FF</Color>
+
+    <Thickness x:Key="GlassBorderThickness">1</Thickness>
+    <CornerRadius x:Key="GlassRadiusLg">16</CornerRadius>
+    <CornerRadius x:Key="GlassRadiusMd">12</CornerRadius>
+
+    <!-- Baggrund (app window) -->
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#00000000"/>
+    <SolidColorBrush x:Key="AppWindowTintBrush" Color="#22000000"/>
+
+    <SolidColorBrush x:Key="GlassSurfaceBrush" Color="{DynamicResource GlassSurfaceColor}" />
+    <SolidColorBrush x:Key="GlassSurfaceBrushStrong" Color="{DynamicResource GlassSurfaceColorStrong}" />
+    <SolidColorBrush x:Key="GlassBorderBrush" Color="{DynamicResource GlassBorderColor}" />
+    <SolidColorBrush x:Key="GlassBorderBrushStrong" Color="{DynamicResource GlassBorderColorStrong}" />
+
+    <SolidColorBrush x:Key="GlassTextBrush" Color="{DynamicResource GlassTextColor}" />
+    <SolidColorBrush x:Key="GlassTextMutedBrush" Color="{DynamicResource GlassTextMutedColor}" />
+
+    <SolidColorBrush x:Key="GlassAccentBrush" Color="{DynamicResource GlassAccentColor}" />
+  </Styles.Resources>
+
+  <!-- ========== GLOBAL TEXT DEFAULTS ========== -->
+  <Style Selector="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource GlassTextBrush}" />
+  </Style>
+
+  <!-- ========== GLASS CARD ========== -->
+  <Style Selector="Border.GlassCard">
+    <Setter Property="Background" Value="{DynamicResource GlassSurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource GlassBorderThickness}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource GlassRadiusLg}" />
+    <Setter Property="Padding" Value="12" />
+    <Setter Property="BoxShadow"
+            Value="0 10 22 0 #4D000000"/>
+  </Style>
+
+  <Style Selector="Border.GlassCardStrong">
+    <Setter Property="Background" Value="{DynamicResource GlassSurfaceBrushStrong}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrushStrong}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource GlassBorderThickness}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource GlassRadiusLg}" />
+  </Style>
+
+  <!-- ========== BUTTONS ========== -->
+  <Style Selector="Button.GlassButton">
+    <Setter Property="Background" Value="#1FFFFFFF"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource GlassRadiusMd}" />
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="Foreground" Value="{DynamicResource GlassTextBrush}" />
+  </Style>
+
+  <Style Selector="Button.GlassButton:pointerover">
+    <Setter Property="Background" Value="#2AFFFFFF"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrushStrong}" />
+  </Style>
+
+  <Style Selector="Button.GlassButton:pressed">
+    <Setter Property="Background" Value="#14FFFFFF"/>
+  </Style>
+
+  <Style Selector="Button.GlassPrimary">
+    <Setter Property="Background" Value="#334DA3FF"/>
+    <Setter Property="BorderBrush" Value="#6666B6FF"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource GlassRadiusMd}" />
+    <Setter Property="Padding" Value="14,10" />
+    <Setter Property="Foreground" Value="{DynamicResource GlassTextBrush}" />
+  </Style>
+
+  <Style Selector="Button.GlassPrimary:pointerover">
+    <Setter Property="Background" Value="#3A4DA3FF"/>
+  </Style>
+
+  <!-- ========== TEXTBOX ========== -->
+  <Style Selector="TextBox.GlassTextBox">
+    <Setter Property="Background" Value="#14FFFFFF"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource GlassRadiusMd}" />
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="Foreground" Value="{DynamicResource GlassTextBrush}" />
+    <Setter Property="SelectionBrush" Value="#55A7FF"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBox:focus">
+    <Setter Property="BorderBrush" Value="#88A7FF"/>
+  </Style>
+  
+  <Style Selector="TextBox.GlassTextBoxDark">
+    <Setter Property="Background" Value="#22000000"/>
+    <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBoxDark:focus">
+    <Setter Property="BorderBrush" Value="#66A7FF"/>
+  </Style>
+  
+  <!-- Force dark background even when focused (Fluent likes to brighten inputs) -->
+  <Style Selector="TextBox.GlassTextBox:focus">
+    <Setter Property="Background" Value="#14FFFFFF"/>
+    <Setter Property="BorderBrush" Value="#88A7FF"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBoxDark:focus">
+    <Setter Property="Background" Value="#22000000"/>
+    <Setter Property="BorderBrush" Value="#66A7FF"/>
+  </Style>
+  
+  <!-- FIX: Fluent/TextBox template sætter ofte egen focused background på PART_BorderElement -->
+  <Style Selector="TextBox.GlassTextBox /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="#14FFFFFF"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="#14FFFFFF"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBoxDark /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="#22000000"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBoxDark:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="#22000000"/>
+  </Style>
+
+  <!-- (Optional) hvis TextPresenter/ScrollViewer også “lyser op” i din theme-version -->
+  <Style Selector="TextBox.GlassTextBox /template/ ScrollViewer#PART_ScrollViewer">
+    <Setter Property="Background" Value="#00000000"/>
+  </Style>
+
+  <Style Selector="TextBox.GlassTextBoxDark /template/ ScrollViewer#PART_ScrollViewer">
+    <Setter Property="Background" Value="#00000000"/>
+  </Style>
+
+  <!-- Also handle pointerover so it doesn't look "washed" -->
+  <Style Selector="TextBox.GlassTextBoxDark:pointerover">
+    <Setter Property="Background" Value="#26000000"/>
+    <Setter Property="BorderBrush" Value="#44FFFFFF"/>
+  </Style>
+
+  <!-- ========== LISTBOX ========== -->
+  <Style Selector="ListBox.GlassList">
+    <Setter Property="Background" Value="#00000000"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  
+  <!-- Kortet inde i en liste (selve den rundede firkant) -->
+  <Style Selector="Border.GlassItemCard">
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="#24FFFFFF"/>
+    <Setter Property="Background" Value="#14FFFFFF"/>  <!-- lidt mere “dark glass” -->
+  </Style>
+
+  <Style Selector="ListBoxItem:pointerover Border.GlassItemCard">
+    <Setter Property="Background" Value="#1EFFFFFF"/>
+    <Setter Property="BorderBrush" Value="#38FFFFFF"/>
+  </Style>
+
+  <!-- Selected: farv KUN kortet, ikke hele række -->
+  <Style Selector="ListBoxItem:selected Border.GlassItemCard">
+    <Setter Property="Background" Value="#2A4DA3FF"/>   <!-- blød accent -->
+    <Setter Property="BorderBrush" Value="#66A7FF"/>
+  </Style>
+
+  <!-- Sørg for teksten forbliver lys/læsbar ved selection -->
+  <Style Selector="ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="#F8FFFFFF"/>
+  </Style>
+  
+  <Style Selector="SplitView">
+    <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
+    <Setter Property="PaneBackground" Value="{DynamicResource AppBackgroundBrush}"/>
+  </Style>
+
+</Styles>

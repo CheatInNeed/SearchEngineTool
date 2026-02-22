@@ -107,10 +107,15 @@ public partial class MainWindow : Window
                 Height = r.Height,
                 Fill = new Avalonia.Media.SolidColorBrush(
                     isActive
-                        ? Avalonia.Media.Color.FromArgb(200, 255, 230, 0)  // tydeligere gul
-                        : Avalonia.Media.Color.FromArgb(90, 255, 255, 0)   // mere “svag”
+                        ? Avalonia.Media.Color.FromArgb(165, 90, 200, 255)
+                        : Avalonia.Media.Color.FromArgb(75, 90, 200, 255)
                 ),
-                StrokeThickness = 0
+                Stroke = new Avalonia.Media.SolidColorBrush(
+                    isActive
+                        ? Avalonia.Media.Color.FromArgb(140, 160, 235, 255)
+                        : Avalonia.Media.Color.FromArgb(60, 160, 235, 255)
+                ),
+                StrokeThickness = isActive ? 1.0 : 0.0
             };
 
             Canvas.SetLeft(rect, r.X);

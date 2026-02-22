@@ -4,186 +4,300 @@
         x:Class="FileSearchTool.MainWindow"
         x:Name="Root"
         x:DataType="vm:MainWindowViewModel"
-        Title="SearchEngineTool" Width="1400" Height="600">
+        Title="SearchEngineTool" Width="1400" Height="700"
+        Background="Transparent"
+        TransparencyLevelHint="AcrylicBlur,Blur">
 
-    <DockPanel Margin="12">
+  <Border Background="{DynamicResource AppWindowTintBrush}">
+    <DockPanel Margin="16">
 
-    <!-- Top panel (behold jeres mappe+query controls) -->
-    <StackPanel DockPanel.Dock="Top" Spacing="8">
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button Content="☰"
-                Command="{Binding ToggleResultsPaneCommand}"/>
-        
-        <Button Content="Seneste mapper"
-                Command="{Binding ToggleRecentFoldersCommand}"/>
+      <!-- MAIN CONTENT -->
+      <SplitView IsPaneOpen="{Binding IsResultsPaneOpen}"
+                 OpenPaneLength="380"
+                 CompactPaneLength="0"
+                 DisplayMode="Inline"
+                 Background="{DynamicResource AppBackgroundBrush}"
+                 PaneBackground="{DynamicResource AppBackgroundBrush}">
 
-        <TextBlock Text="Mappe:" VerticalAlignment="Center"/>
-        <TextBox Width="520" Text="{Binding SelectedFolder}"/>
-        <Button Content="Vælg..." Click="PickFolder_Click"/>
-      </StackPanel>
+        <!-- RESULTS PANE -->
+        <SplitView.Pane>
+          <Grid RowDefinitions="Auto,Auto,*"
+                RowSpacing="6">
 
-      <StackPanel Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="Query:" VerticalAlignment="Center"/>
-        <TextBox Width="600"
-                 Text="{Binding Query}"
-                 KeyDown="QueryBox_KeyDown"/>
-        <Button Content="Search"
-                Command="{Binding SearchCommand}"
-                IsDefault="True"/>
-      </StackPanel>
+      <!-- COMPACT COMMAND SURFACE (kun venstre side nu) -->
+      <Border Grid.Row="0" Classes="GlassCard GlassCardStrong PaneHeader" Padding="12">
+        <StackPanel Spacing="14">
 
-      <TextBlock Text="{Binding Status}" />
-    </StackPanel>
-    
-    <Border IsVisible="{Binding IsRecentFoldersOpen}"
-            Margin="0,8,0,8"
-            Padding="12"
-            BorderThickness="1"
-            BorderBrush="{DynamicResource ThemeBorderMidBrush}">
-      <StackPanel Spacing="8">
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <TextBlock Text="Seneste mapper" FontWeight="Bold"/>
-          <Button Content="Skjul"
+          <!-- ROW 2: Seneste mapper -->
+          <Button Classes="GlassButton"
+                  Content="Seneste mapper"
+                  HorizontalAlignment="Left"
                   Command="{Binding ToggleRecentFoldersCommand}"/>
-        </StackPanel>
 
-        <ListBox ItemsSource="{Binding RecentFolders}"
-                 SelectedItem="{Binding SelectedRecentFolder}">
-          <ListBox.ItemTemplate>
-            <DataTemplate>
-              <TextBlock Text="{Binding Name}" TextWrapping="Wrap"/>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </StackPanel>
-    </Border>
-    
-    <!-- Results as burger pane -->
-    <SplitView IsPaneOpen="{Binding IsResultsPaneOpen}"
-               OpenPaneLength="420"
-               CompactPaneLength="0"
-               DisplayMode="Inline">
+          <!-- ROW 3: Path -->
+          <Grid ColumnDefinitions="Auto,*,Auto"
+                ColumnSpacing="12">
+            <TextBlock Text="Mappe"
+                       VerticalAlignment="Center"
+                       Opacity="0.85"/>
 
-      <SplitView.Pane>
-        <Border Padding="8" BorderThickness="1"
-                BorderBrush="{DynamicResource ThemeBorderMidBrush}">
-          <Grid RowDefinitions="Auto,*">
-            <TextBlock Text="Resultater" FontWeight="Bold"/>
+            <TextBox Grid.Column="1"
+                     Classes="GlassTextBox GlassTextBoxDark"
+                     Text="{Binding SelectedFolder}"/>
 
-            <ListBox Grid.Row="1"
-                     ItemsSource="{Binding Results}"
-                     SelectedItem="{Binding SelectedResult}"
-                     DoubleTapped="Results_DoubleTapped">
-              <ListBox.ItemTemplate>
-                <DataTemplate>
-                  <StackPanel Spacing="2">
-                    <TextBlock Text="{Binding FileName}" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding HitSummary}" Opacity="0.85" TextWrapping="Wrap"/>
-                  </StackPanel>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
+            <Button Grid.Column="2"
+                    Classes="GlassButton"
+                    Content="Vælg…"
+                    MinWidth="90"
+                    Click="PickFolder_Click"/>
           </Grid>
-        </Border>
-      </SplitView.Pane>
 
-      <SplitView.Content>
-  <Grid Margin="12,0,0,0">
+          <!-- ROW 4: Query -->
+          <Grid ColumnDefinitions="Auto,*,Auto"
+                ColumnSpacing="12">
+            <TextBlock Text="Query"
+                       VerticalAlignment="Center"
+                       Opacity="0.85"/>
 
-    <!-- Placeholder når der ikke er preview -->
-    <Border IsVisible="{Binding HasNoPreview}"
-            Padding="16"
-            BorderThickness="1"
-            BorderBrush="{DynamicResource ThemeBorderMidBrush}">
-      <TextBlock Text="Søg, og vælg et PDF-resultat for preview."
-                 Opacity="0.7"/>
-    </Border>
+            <TextBox Grid.Column="1"
+                     Classes="GlassTextBox GlassTextBoxDark"
+                     Text="{Binding Query}"
+                     KeyDown="QueryBox_KeyDown"/>
 
-    <!-- Preview når der ER preview -->
-    <Grid IsVisible="{Binding HasPreview}"
-          RowDefinitions="Auto,*">
+            <Button Grid.Column="2"
+                    Classes="GlassPrimary"
+                    Content="Search"
+                    MinWidth="90"
+                    Command="{Binding SearchCommand}"
+                    IsDefault="True"/>
+          </Grid>
 
-      <!-- Preview toolbar -->
-      <Border Padding="8"
-              BorderThickness="1"
-              BorderBrush="{DynamicResource ThemeBorderMidBrush}">
-        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
-          <Button Content="◀ Hit" Grid.Column="0"
-                  Command="{Binding CurrentPreview.PrevHitCommand}"/>
-          <Button Content="Hit ▶" Grid.Column="1"
-                  Command="{Binding CurrentPreview.NextHitCommand}"/>
-
-          <Button Content="◀ Side" Grid.Column="2"
-                  Command="{Binding CurrentPreview.PrevPageCommand}"/>
-          <Button Content="Side ▶" Grid.Column="3"
-                  Command="{Binding CurrentPreview.NextPageCommand}"/>
-
-          <Button Content="-" Grid.Column="4"
-                  Command="{Binding CurrentPreview.ZoomOutCommand}"/>
-          <Button Content="+" Grid.Column="5"
-                  Command="{Binding CurrentPreview.ZoomInCommand}"/>
-
-          <TextBlock Grid.Column="7"
-                     VerticalAlignment="Center"
-                     Text="{Binding CurrentPreview.HitStatus}"/>
-          <TextBlock Grid.Column="8"
-                     VerticalAlignment="Center"
-                     Margin="12,0,0,0"
-                     Text="{Binding CurrentPreview.PageStatus}"/>
-        </Grid>
+          <TextBlock Text="{Binding Status}"
+                     Opacity="0.80"
+                     TextWrapping="Wrap"/>
+        </StackPanel>
       </Border>
 
-      <!-- Preview content -->
-      <Grid Grid.Row="1" ColumnDefinitions="260,*" Margin="0,12,0,0">
+      <!-- RECENT FOLDERS DROPDOWN PANEL -->
+      <Border Grid.Row="1"
+              IsVisible="{Binding IsRecentFoldersOpen}"
+              Classes="GlassCard"
+              Padding="12">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Seneste mapper" FontWeight="SemiBold" FontSize="16"/>
+            <Button Grid.Column="1"
+                    Classes="GlassButton"
+                    Content="Skjul"
+                    Command="{Binding ToggleRecentFoldersCommand}"/>
+          </Grid>
 
-        <Border Grid.Column="0" Padding="8"
-                BorderThickness="1"
-                BorderBrush="{DynamicResource ThemeBorderMidBrush}">
-          <Grid RowDefinitions="Auto,*">
-            <TextBlock Text="Hits" FontWeight="Bold"/>
+          <ListBox Classes="GlassList"
+                   ItemsSource="{Binding RecentFolders}"
+                   SelectedItem="{Binding SelectedRecentFolder}">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Border Classes="GlassItemCard" Padding="10">
+                  <TextBlock Text="{Binding Name}" TextWrapping="Wrap"/>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
 
-            <ListBox Grid.Row="1"
-                     ItemsSource="{Binding CurrentPreview.SidebarItems}"
-                     SelectedItem="{Binding CurrentPreview.SelectedSidebarItem}">
-              <ListBox.ItemTemplate>
-                <DataTemplate>
-                  <StackPanel Spacing="2">
+            <ListBox.ItemContainerTheme>
+              <ControlTheme TargetType="ListBoxItem">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Margin" Value="0,0,0,8"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+              </ControlTheme>
+            </ListBox.ItemContainerTheme>
+          </ListBox>
+        </StackPanel>
+      </Border>
+
+      <!-- RESULTS + HITS (side-by-side) -->
+      <Border Grid.Row="2" Classes="GlassCard PaneBody" Padding="12">
+    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+
+      <!-- RESULTS -->
+      <Grid Grid.Column="0" RowDefinitions="Auto,*" RowSpacing="10">
+        <TextBlock Text="Resultater" FontWeight="SemiBold" FontSize="16"/>
+
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+          <ListBox Classes="GlassList"
+                   ItemsSource="{Binding Results}"
+                   SelectedItem="{Binding SelectedResult}"
+                   DoubleTapped="Results_DoubleTapped">
+
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Border Classes="GlassItemCard" Padding="10">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding FileName}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding HitSummary}" Opacity="0.85" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+
+            <ListBox.ItemContainerTheme>
+              <ControlTheme TargetType="ListBoxItem">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Margin" Value="0,0,0,8"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+              </ControlTheme>
+            </ListBox.ItemContainerTheme>
+          </ListBox>
+        </ScrollViewer>
+      </Grid>
+
+      <!-- HITS -->
+      <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="10">
+        <TextBlock Text="Hits" FontWeight="SemiBold" FontSize="16"/>
+
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+          <ListBox Classes="GlassList"
+                   ItemsSource="{Binding CurrentPreview.SidebarItems}"
+                   SelectedItem="{Binding CurrentPreview.SelectedSidebarItem}">
+
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <Border Classes="GlassItemCard" Padding="10">
+                  <StackPanel Spacing="6">
                     <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
                     <TextBlock Text="{Binding Context}" Opacity="0.85" TextWrapping="Wrap"/>
                   </StackPanel>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
-          </Grid>
-        </Border>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
 
-
-        <Border Grid.Column="1" Padding="8"
-                BorderThickness="1"
-                BorderBrush="{DynamicResource ThemeBorderMidBrush}">
-          <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                        VerticalScrollBarVisibility="Auto">
-            <Grid>
-              <Image Source="{Binding CurrentPreview.PageBitmap}"
-                     Stretch="None"
-                     Width="{Binding CurrentPreview.PagePixelWidth}"
-                     Height="{Binding CurrentPreview.PagePixelHeight}" />
-              <Canvas x:Name="MainOverlayCanvas"
-                      Canvas.ZIndex="10"
-                      IsHitTestVisible="False"
-                      Width="{Binding CurrentPreview.PagePixelWidth}"
-                      Height="{Binding CurrentPreview.PagePixelHeight}" />
-            </Grid>
-          </ScrollViewer>
-        </Border>
-
+            <ListBox.ItemContainerTheme>
+              <ControlTheme TargetType="ListBoxItem">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Margin" Value="0,0,0,8"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+              </ControlTheme>
+            </ListBox.ItemContainerTheme>
+          </ListBox>
+        </ScrollViewer>
       </Grid>
+
     </Grid>
+  </Border>
 
-  </Grid>
-</SplitView.Content>
+          </Grid>
+        </SplitView.Pane>
 
-    </SplitView>
+        <!-- RIGHT SIDE -->
+        <SplitView.Content>
+          <Grid Margin="12,0,0,0">
 
-  </DockPanel>
+            <!-- Placeholder (no preview) -->
+            <Border IsVisible="{Binding HasNoPreview}"
+                    Classes="GlassCard"
+                    Padding="18">
+              <StackPanel Spacing="8">
+                <TextBlock Text="PDF preview" FontSize="18" FontWeight="SemiBold"/>
+                <TextBlock Text="Søg, og vælg et PDF-resultat for preview."
+                           Opacity="0.80"
+                           TextWrapping="Wrap"/>
+              </StackPanel>
+            </Border>
+
+            <!-- Preview (has preview) -->
+            <Grid IsVisible="{Binding HasPreview}"
+                  RowDefinitions="Auto,*"
+                  RowSpacing="12">
+
+              <!-- Preview toolbar -->
+              <Border Grid.Row="0" Classes="GlassCard" Padding="10">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto"
+                      ColumnSpacing="10">
+                  
+                  <Button Grid.Column="0"
+                          Classes="GlassButton"
+                          Content="☰"
+                          Width="44"
+                          Command="{Binding ToggleResultsPaneCommand}"/>
+
+                  <!-- ALWAYS VISIBLE BURGER -->
+                  <Button Grid.Column="0"
+                          Classes="GlassButton"
+                          Content="☰"
+                          Width="44"
+                          Command="{Binding ToggleResultsPaneCommand}"/>
+
+                  <Button Grid.Column="1"
+                          Classes="GlassButton"
+                          Content="◀ Hit"
+                          Command="{Binding CurrentPreview.PrevHitCommand}"/>
+
+                  <Button Grid.Column="2"
+                          Classes="GlassButton"
+                          Content="Hit ▶"
+                          Command="{Binding CurrentPreview.NextHitCommand}"/>
+
+                  <Button Grid.Column="3"
+                          Classes="GlassButton"
+                          Content="◀ Side"
+                          Command="{Binding CurrentPreview.PrevPageCommand}"/>
+
+                  <Button Grid.Column="4"
+                          Classes="GlassButton"
+                          Content="Side ▶"
+                          Command="{Binding CurrentPreview.NextPageCommand}"/>
+
+                  <Button Grid.Column="5"
+                          Classes="GlassButton"
+                          Content="−"
+                          Command="{Binding CurrentPreview.ZoomOutCommand}"/>
+
+                  <Button Grid.Column="6"
+                          Classes="GlassButton"
+                          Content="+"
+                          Command="{Binding CurrentPreview.ZoomInCommand}"/>
+
+                  <TextBlock Grid.Column="8"
+                             VerticalAlignment="Center"
+                             Opacity="0.82"
+                             Text="{Binding CurrentPreview.HitStatus}"/>
+
+                  <TextBlock Grid.Column="9"
+                             VerticalAlignment="Center"
+                             Opacity="0.82"
+                             Text="{Binding CurrentPreview.PageStatus}"/>
+                </Grid>
+              </Border>
+
+              <!-- Preview content -->
+              <Border Grid.Row="1" Classes="GlassCard" Padding="12">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto">
+                  <Grid>
+                    <Image Source="{Binding CurrentPreview.PageBitmap}"
+                           Stretch="None"
+                           Width="{Binding CurrentPreview.PagePixelWidth}"
+                           Height="{Binding CurrentPreview.PagePixelHeight}" />
+                    <Canvas x:Name="MainOverlayCanvas"
+                            Canvas.ZIndex="10"
+                            IsHitTestVisible="False"
+                            Width="{Binding CurrentPreview.PagePixelWidth}"
+                            Height="{Binding CurrentPreview.PagePixelHeight}" />
+                  </Grid>
+                </ScrollViewer>
+              </Border>
+            </Grid>
+
+          </Grid>
+        </SplitView.Content>
+      </SplitView>
+
+    </DockPanel>
+  </Border>
 </Window>
