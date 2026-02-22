@@ -37,4 +37,19 @@
   <ItemGroup>
     <Folder Include="Indexing\" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Resources\synonyms.txt" />
+    <Content Include="Resources\synonyms.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <None Remove="Resources\stopwords_en.txt" />
+    <Content Include="Resources\stopwords_en.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <None Remove="Resources\stopwords_da.txt" />
+    <Content Include="Resources\stopwords_da.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
