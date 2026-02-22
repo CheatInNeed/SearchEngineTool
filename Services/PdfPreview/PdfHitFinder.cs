@@ -31,6 +31,19 @@ public static class PdfHitFinder
         var qNorm = Norm(rawQuery);
         var qTokens = qNorm.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
         var hasPhrase = qTokens.Count >= 2;
+        
+        // Sub-phrases fra query (bigrams/trigrams) – i rækkefølge
+        var qBigrams = new List<string>();
+        var qTrigrams = new List<string>();
+
+        for (int i = 0; i <= qTokens.Count - 2; i++)
+            qBigrams.Add($"{qTokens[i]} {qTokens[i + 1]}");
+
+        for (int i = 0; i <= qTokens.Count - 3; i++)
+            qTrigrams.Add($"{qTokens[i]} {qTokens[i + 1]} {qTokens[i + 2]}");
+        
+        qBigrams = qBigrams.Distinct(StringComparer.Ordinal).ToList();
+        qTrigrams = qTrigrams.Distinct(StringComparer.Ordinal).ToList();
 
         using var doc = PdfDocument.Open(pdfPath);
 
@@ -46,12 +59,78 @@ public static class PdfHitFinder
             // normaliser hvert ord til token(s)
             // (nogle "words" kan indeholde tegn; vi splitter efter Norm)
             var flat = new List<(string token, Word word)>();
+            
             foreach (var w in words)
             {
                 var wn = Norm(w.Text);
                 if (string.IsNullOrWhiteSpace(wn)) continue;
                 foreach (var t in wn.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                     flat.Add((t, w));
+            }
+            
+            // A0) Trigram hits (højere end phrase og token)
+            if (qTrigrams.Count > 0)
+            {
+                for (int i = 0; i <= flat.Count - 3; i++)
+                {
+                    var tri = $"{flat[i].token} {flat[i + 1].token} {flat[i + 2].token}";
+                    if (!qTrigrams.Contains(tri, StringComparer.Ordinal)) continue;
+
+                    var wordsTri = new[] { flat[i].word, flat[i + 1].word, flat[i + 2].word }
+                        .Distinct()
+                        .ToList();
+
+                    var rects = wordsTri.Select(w => ToAvaloniaRect(w.BoundingBox)).ToArray();
+
+                    var firstWord = flat[i].word;
+                    var startIdx = words.IndexOf(firstWord);
+
+                    var ctx = startIdx >= 0
+                        ? BuildMicroContext(originalWordTexts, startIdx, Math.Max(1, wordsTri.Count))
+                        : $"… {tri} …";
+
+                    var penalty = ContextPenalty(ctx);
+
+                    hits.Add(new PdfHit(
+                        ++hitIndex,
+                        page.Number,
+                        rects,
+                        Score: (6.0f + EarlyBonus(page.Number, i)) - penalty,
+                        MatchedToken: tri,
+                        Context: ctx));
+                }
+            }
+            
+            if (qBigrams.Count > 0)
+            {
+                for (int i = 0; i <= flat.Count - 2; i++)
+                {
+                    var bi = $"{flat[i].token} {flat[i + 1].token}";
+                    if (!qBigrams.Contains(bi, StringComparer.Ordinal)) continue;
+
+                    var wordsBi = new[] { flat[i].word, flat[i + 1].word }
+                        .Distinct()
+                        .ToList();
+
+                    var rects = wordsBi.Select(w => ToAvaloniaRect(w.BoundingBox)).ToArray();
+
+                    var firstWord = flat[i].word;
+                    var startIdx = words.IndexOf(firstWord);
+
+                    var ctx = startIdx >= 0
+                        ? BuildMicroContext(originalWordTexts, startIdx, Math.Max(1, wordsBi.Count))
+                        : $"… {bi} …";
+
+                    var penalty = ContextPenalty(ctx);
+
+                    hits.Add(new PdfHit(
+                        ++hitIndex,
+                        page.Number,
+                        rects,
+                        Score: (4.0f + EarlyBonus(page.Number, i)) - penalty,
+                        MatchedToken: bi,
+                        Context: ctx));
+                }
             }
 
             // A) Phrase hits (sekvens)
@@ -198,4 +277,31 @@ public static class PdfHitFinder
         return 0.0f;
     }
 
+    private static float ContextPenalty(string ctx)
+    {
+        if (string.IsNullOrWhiteSpace(ctx)) return 0f;
+
+        var s = ctx.ToLowerInvariant();
+
+        // Lille "INDEX/TOC" penalty – kun til tie-break
+        float p = 0f;
+        if (s.Contains("index", StringComparison.Ordinal) || s.Contains("table of contents", StringComparison.Ordinal))
+            p += 0.6f;
+
+        // Høj digit-ratio (ofte index/tabeller) => lille penalty
+        int digits = 0, letters = 0;
+        foreach (var ch in s)
+        {
+            if (char.IsDigit(ch)) digits++;
+            else if (char.IsLetter(ch)) letters++;
+        }
+
+        if (letters > 0)
+        {
+            var ratio = digits / (float)(letters + digits);
+            if (ratio > 0.35f) p += 0.4f;
+        }
+
+        return p;
+    }
 }

@@ -34,6 +34,7 @@ public sealed class LinearModel
             Sum(nameof(f.LuceneScore), f.LuceneScore) +
             Sum(nameof(f.ProximityScore), f.ProximityScore) +
             Sum(nameof(f.PhraseBonus), f.PhraseBonus) +
+            Sum(nameof(f.SubPhraseBonus), f.SubPhraseBonus) +
             Sum(nameof(f.DensityScore), f.DensityScore) +
             Sum(nameof(f.AllTermsBonus), f.AllTermsBonus) +
             Sum(nameof(f.FreshnessScore), f.FreshnessScore) +

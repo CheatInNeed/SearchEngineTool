@@ -227,7 +227,8 @@ public static class ReRankScorer
         {
             LuceneScore = luceneScore,
             ProximityScore = proximityScore,
-            PhraseBonus = phraseBonus + subPhraseBonus,
+            PhraseBonus = phraseBonus,
+            SubPhraseBonus = subPhraseBonus,
             DensityScore = densityScore,
             AllTermsBonus = allTermsBonus,
 
@@ -241,7 +242,7 @@ public static class ReRankScorer
 
         float finalScore = model != null
             ? model.Score(fv)
-            : (luceneScore + proximityScore + (phraseBonus + subPhraseBonus) + densityScore + allTermsBonus
+            : (luceneScore + proximityScore + phraseBonus + subPhraseBonus + densityScore + allTermsBonus
                + freshnessScore + filetypeScore + folderDepthScore
                + earlyScore + coverageScore);
 
@@ -283,32 +284,39 @@ public static class ReRankScorer
     
     private static float ComputeSubPhraseBonus(string normText, List<string> qTokens)
     {
-        // Boost for query sub-phrases (bigrams/trigrams)
-        // Example: "process control block pcb" rewards "process control block"
+        // Unik sub-phrase bonus (bigrams/trigrams) + cap/normalisering
         if (qTokens.Count < 3) return 0f;
 
-        const float trigramBoost = 2.5f; // strong
-        const float bigramBoost = 1.2f;  // mild
+        const float trigramBoost = 2.5f;
+        const float bigramBoost = 1.2f;
 
+        // Cap så det ikke kan dominere
+        const float maxBonus = 6.0f;
+
+        // (Valgfri) let query-length normalisering
+        float qNorm = 1f / MathF.Max(1f, MathF.Log(1f + qTokens.Count));
+
+        var matched = new HashSet<string>(StringComparer.Ordinal);
         float bonus = 0f;
 
-        // 3-grams
+        // Trigrams (unikke)
         for (int i = 0; i <= qTokens.Count - 3; i++)
         {
             var tri = $"{qTokens[i]} {qTokens[i + 1]} {qTokens[i + 2]}";
-            if (normText.Contains(tri, StringComparison.Ordinal))
+            if (matched.Add(tri) && normText.Contains(tri, StringComparison.Ordinal))
                 bonus += trigramBoost;
         }
 
-        // 2-grams
+        // Bigrams (unikke)
         for (int i = 0; i <= qTokens.Count - 2; i++)
         {
             var bi = $"{qTokens[i]} {qTokens[i + 1]}";
-            if (normText.Contains(bi, StringComparison.Ordinal))
+            if (matched.Add(bi) && normText.Contains(bi, StringComparison.Ordinal))
                 bonus += bigramBoost;
         }
 
-        return bonus;
+        bonus *= qNorm;
+        return MathF.Min(bonus, maxBonus);
     }
 
 }
