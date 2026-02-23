@@ -15,6 +15,14 @@ public static class BenchmarkCli
 
         if (idx >= 0 && idx + 1 < args.Length)
             path = args[idx + 1];
+        
+        path = ResolvePath(path);
+
+        if (!File.Exists(path))
+        {
+            Console.WriteLine($"Benchmark file not found: {path}");
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -52,5 +60,36 @@ public static class BenchmarkCli
         Console.WriteLine($"Mean NDCG@{report.K}: {report.MeanNdcg:0.0000}");
         Console.WriteLine($"Mean MRR:        {report.MeanMrr:0.0000}");
         Console.WriteLine();
+    }
+    
+    private static string ResolvePath(string input)
+    {
+        // 1) as-is (absolute or relative to cwd)
+        if (File.Exists(input)) return Path.GetFullPath(input);
+
+        // 2) relative to current working directory
+        var cwd = Directory.GetCurrentDirectory();
+        var fromCwd = Path.Combine(cwd, input);
+        if (File.Exists(fromCwd)) return Path.GetFullPath(fromCwd);
+
+        // 3) relative to output directory (bin/.../Resources)
+        var baseDir = AppContext.BaseDirectory;
+        var fromBase = Path.Combine(baseDir, input);
+        if (File.Exists(fromBase)) return Path.GetFullPath(fromBase);
+
+        // 4) common: user passes "FileSearchTool/Resources/.."
+        // try stripping leading "FileSearchTool/"
+        var trimmed = input.Replace('\\', '/');
+        if (trimmed.StartsWith("FileSearchTool/", StringComparison.OrdinalIgnoreCase))
+        {
+            var stripped = trimmed.Substring("FileSearchTool/".Length);
+            var fromCwdStripped = Path.Combine(cwd, stripped);
+            if (File.Exists(fromCwdStripped)) return Path.GetFullPath(fromCwdStripped);
+
+            var fromBaseStripped = Path.Combine(baseDir, stripped);
+            if (File.Exists(fromBaseStripped)) return Path.GetFullPath(fromBaseStripped);
+        }
+
+        return input; // will fail and print with the attempted path
     }
 }

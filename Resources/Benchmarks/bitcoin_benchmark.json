@@ -1,0 +1,34 @@
+{
+  "rootFolder": "/Users/peterroland/Library/CloudStorage/OneDrive-DanmarksTekniskeUniversitet/DTU/SearchEngineProjekt/testfolder",
+  "k": 10,
+  "queries": [
+    {
+      "id": "bitcoin-proof-of-work",
+      "query": "proof of work",
+      "relevant": [
+        { "path": "bitcoin.pdf", "gain": 3 }
+      ]
+    },
+    {
+      "id": "bitcoin-double-spending",
+      "query": "double spending problem",
+      "relevant": [
+        { "path": "bitcoin.pdf", "gain": 3 }
+      ]
+    },
+    {
+      "id": "bitcoin-timestamp-server",
+      "query": "timestamp server hash chain",
+      "relevant": [
+        { "path": "bitcoin.pdf", "gain": 3 }
+      ]
+    },
+    {
+      "id": "bitcoin-merkle-tree",
+      "query": "merkle tree block header",
+      "relevant": [
+        { "path": "bitcoin.pdf", "gain": 3 }
+      ]
+    }
+  ]
+}
