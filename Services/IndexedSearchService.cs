@@ -172,7 +172,15 @@ public class IndexedSearchService
         return results;
     }
     
-    public async Task<List<SearchResultSummary>> SearchSummaryAsync(string rootFolder, string query)
+    public Task<List<SearchResultSummary>> SearchSummaryAsync(string rootFolder, string query)
+{
+    return SearchSummaryAsync(rootFolder, query, modelOverride: null);
+}
+
+public async Task<List<SearchResultSummary>> SearchSummaryAsync(
+    string rootFolder,
+    string query,
+    FileSearchTool.Services.Ranking.LinearModel? modelOverride)
 {
     var results = new List<SearchResultSummary>();
 
@@ -187,37 +195,36 @@ public class IndexedSearchService
 
     // === Stage 1: Retrieval (top 200) ===
     var hits = _luceneSearchService.Search(rootFolder, query, topN: 200);
-    
-    // Load LTR-light model (optional)
-    var resourcesDir = Path.Combine(AppContext.BaseDirectory, "Resources");
-    var modelPath = Path.Combine(resourcesDir, "ltr_weights.json");
-    var model = FileSearchTool.Services.Ranking.LinearModel.TryLoad(modelPath);
+
+    // Load LTR-light model (optional) – allow override for benchmarking/tuning
+    var model = modelOverride;
+    if (model == null)
+    {
+        var resourcesDir = Path.Combine(AppContext.BaseDirectory, "Resources");
+        var modelPath = Path.Combine(resourcesDir, "ltr_weights.json");
+        model = FileSearchTool.Services.Ranking.LinearModel.TryLoad(modelPath);
+    }
 
     // Query tokens (samme som rerank bruger)
     var analyzedTokens = new FileSearchTool.Services.Lucene.LuceneQueryBuilder(_analyzer)
         .AnalyzeQueryTerms(query);
 
-        // DocFreq stats til IDF approx
+    // DocFreq stats til IDF approx
     var (N, dfByTerm) = _luceneStatsService.GetDocFreqs(rootFolder, analyzedTokens, field: "content");
 
-
-    // === Stage 2: Re-rank (top 200 -> sort by FinalScore -> take 50) ===
+    // === Stage 2: Re-rank ===
     var scored = new List<SearchResultSummary>(hits.Count);
 
-    // Hvis du udvider SearchResultSummary til at bære hash senere, så group på hash.
-    // Lige nu kan du i stedet collapse på "path" (ingen effekt) – bedst at udvide summary med hash.
     foreach (var (path, luceneScore, storedContent, ext, ticks, size, depth, hash) in hits)
     {
         try
         {
-            // Use storedContent if present; else fallback extract (slower)
             string text = !string.IsNullOrWhiteSpace(storedContent)
                 ? storedContent!
                 : TextExtractorFactory.Create(path).ExtractText(path);
 
             var breakdown = FileSearchTool.Services.Ranking.ReRankScorer
                 .ScoreDocument(query, analyzedTokens, luceneScore, text, ext, ticks, depth, N, dfByTerm, model);
-
 
             scored.Add(new SearchResultSummary(
                 FilePath: path,
@@ -240,31 +247,11 @@ public class IndexedSearchService
         }
         catch
         {
-            // If re-rank fails for a doc, keep Lucene baseline (don’t drop result)
-            scored.Add(new SearchResultSummary(
-                FilePath: path,
-                FinalScore: luceneScore,
-                LuceneScore: luceneScore,
-                ProximityScore: 0,
-                PhraseBonus: 0,
-                DensityScore: 0,
-                AllTermsBonus: 0,
-                SpanLength: FileSearchTool.Services.Ranking.RankingWeights.MinSpanFallback,
-                MatchedDistinctTerms: 0,
-                ContainsAllTerms: false,
-                FreshnessScore: 0,
-                FiletypeScore: 0,
-                FolderDepthScore: 0,
-                EarlyScore: 0,
-                CoverageScore: 0,
-                SubPhraseBonus: 0
-            ));
+            // swallow per doc
         }
     }
 
     return scored
-        .GroupBy(x => x.FilePath, StringComparer.OrdinalIgnoreCase)
-        .Select(g => g.OrderByDescending(x => x.FinalScore).First())
         .OrderByDescending(x => x.FinalScore)
         .Take(50)
         .ToList();

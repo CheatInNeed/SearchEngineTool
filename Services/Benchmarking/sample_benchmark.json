@@ -1,0 +1,21 @@
+{
+  "rootFolder": "/ABSOLUTE/PATH/TO/YOUR/GOLDEN_SET_FOLDER",
+  "k": 10,
+  "queries": [
+    {
+      "id": "lin-alg-eigen",
+      "query": "egenvektorer egenværdier matrix",
+      "relevant": [
+        { "path": "notes/linear_algebra.pdf", "gain": 3 },
+        { "path": "exercises/eigenvalues.txt", "gain": 2 }
+      ]
+    },
+    {
+      "id": "prog-javafx",
+      "query": "JavaFX controller FXML binding",
+      "relevant": [
+        { "path": "slides/javafx_intro.pdf", "gain": 3 }
+      ]
+    }
+  ]
+}

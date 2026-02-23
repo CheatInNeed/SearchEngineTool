@@ -39,6 +39,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Resources\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="Resources\synonyms.txt" />
     <Content Include="Resources\synonyms.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>

@@ -10,6 +10,11 @@ public sealed class LinearModel
     private readonly Dictionary<string, float> _w;
 
     private LinearModel(Dictionary<string, float> w) => _w = w;
+    
+    public static LinearModel FromWeights(Dictionary<string, float> weights)
+    {
+        return new LinearModel(new Dictionary<string, float>(weights, StringComparer.OrdinalIgnoreCase));
+    }
 
     public static LinearModel? TryLoad(string path)
     {
