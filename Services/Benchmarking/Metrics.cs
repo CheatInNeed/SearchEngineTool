@@ -31,10 +31,15 @@ public static class Metrics
         double sum = 0.0;
         var n = Math.Min(k, rankedPaths.Count);
 
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         for (int i = 0; i < n; i++)
         {
-            relByPath.TryGetValue(rankedPaths[i], out var rel);
-            // standard graded DCG: (2^rel - 1) / log2(i+2)
+            var p = rankedPaths[i];
+            if (!seen.Add(p))
+                continue; // ignore duplicates
+
+            relByPath.TryGetValue(p, out var rel);
             var gain = Math.Pow(2.0, rel) - 1.0;
             var denom = Log2(i + 2);
             sum += gain / denom;

@@ -195,6 +195,11 @@ public async Task<List<SearchResultSummary>> SearchSummaryAsync(
 
     // === Stage 1: Retrieval (top 200) ===
     var hits = _luceneSearchService.Search(rootFolder, query, topN: 200);
+    
+    hits = hits
+        .GroupBy(h => h.path, StringComparer.OrdinalIgnoreCase)
+        .Select(g => g.OrderByDescending(x => x.score).First())
+        .ToList();
 
     // Load LTR-light model (optional) – allow override for benchmarking/tuning
     var model = modelOverride;
