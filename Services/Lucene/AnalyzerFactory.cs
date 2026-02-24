@@ -24,7 +24,8 @@ public static class AnalyzerFactory
 
         // Ét synonymmap (bruges både index + query, fordi I bruger samme analyzer begge steder)
         var synonymsPath = Path.Combine(resourcesDir, "synonyms.txt");
-        var synonymMap = SynonymLoader.TryLoad(version, synonymsPath);
+        //var synonymMap = SynonymLoader.TryLoad(version, synonymsPath);
+        SynonymMap? synonymMap = null; // synonyms slået fra
 
         // Standard analyzer til title/filename/content
         var standard = new ClassicTextAnalyzer(version, stopEn, stopDa, synonymMap);

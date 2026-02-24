@@ -10,10 +10,10 @@ public static class RankingWeights
 
     // Phrase bonuses
     public const float ExactPhraseBonus = 6.0f;
-    public const float NearPhraseBonus = 3.0f;
+    public const float NearPhraseBonus = 4.5f;
 
     // Near phrase definition (span in words between first and last token)
-    public const int NearPhraseMaxSpan = 5; // “inden for 3–5 ord”
+    public const int NearPhraseMaxSpan = 3; // “inden for 3–5 ord”
 
     // All-terms bonus
     public const float AllTermsBonus = 2.5f;
