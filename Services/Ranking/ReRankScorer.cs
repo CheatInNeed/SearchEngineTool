@@ -62,16 +62,18 @@ public static class ReRankScorer
 {
     public static ReRankBreakdown ScoreDocument(
         string rawQuery,
+        IReadOnlyList<string> analyzedTokens,
         float luceneScore,
         string? storedContent,
         string ext,
         long lastModifiedTicks,
         int folderDepth,
         int corpusN,
-        System.Collections.Generic.Dictionary<string,int> dfByTerm,
+        Dictionary<string,int> dfByTerm,
         LinearModel? model)
     {
-        var qTokens = QueryTextUtil.Tokenize(rawQuery)
+        var qTokens = analyzedTokens
+            .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
@@ -167,8 +169,7 @@ public static class ReRankScorer
                 firstPos = Math.Min(firstPos, kv.Value[0]);
         }
 
-        const float gamma = 2.0f; // tunable
-        float earlyScore = (firstPos == int.MaxValue) ? 0f : (gamma / (1f + firstPos));
+        float earlyScore = 0f;
 
         // CoverageScore = sum(IDF(term) for matched terms)
         float coverageScore = 0f;
@@ -186,6 +187,21 @@ public static class ReRankScorer
 
         bool containsAll = window != null && window.ContainsAllTerms;
         int matchedDistinct = window != null ? window.MatchedDistinctTerms : 0;
+        
+        // Bonus: hvis vi har en meget tæt gruppe (>=2 forskellige tokens tæt)
+        // selv hvis ikke alle query-termer er i samme vindue.
+        float closeGroupBonus = 0f;
+        if (window != null)
+        {
+            // window.SpanLength er afstand mellem første og sidste token i bedste vindue
+            // window.MatchedDistinctTerms er antal forskellige query-termer i vinduet
+
+            if (window.MatchedDistinctTerms >= 2 && window.SpanLength <= 3)
+                closeGroupBonus = 3.5f;  // stærkt signal ("et par ord")
+
+            else if (window.MatchedDistinctTerms >= 2 && window.SpanLength <= 6)
+                closeGroupBonus = 1.8f;  // lidt bredere, stadig signal
+        }
 
         // Proximity score: α / (1 + spanLength)
         float proximityScore = (spanLength >= RankingWeights.MinSpanFallback)
@@ -222,12 +238,14 @@ public static class ReRankScorer
         float freshnessScore = MetadataFeatures.FreshnessBoost(nowTicks, lastModifiedTicks);
         float filetypeScore = MetadataFeatures.ExtensionPrior(ext);
         float folderDepthScore = MetadataFeatures.FolderDepthPrior(folderDepth);
+        float headingScore = HeadingFeatures.HeadingBoost(storedContent!, qTokens);
         
         var fv = new FeatureVector
         {
             LuceneScore = luceneScore,
             ProximityScore = proximityScore,
-            PhraseBonus = phraseBonus + subPhraseBonus,
+            PhraseBonus = phraseBonus,
+            SubPhraseBonus = subPhraseBonus,
             DensityScore = densityScore,
             AllTermsBonus = allTermsBonus,
 
@@ -241,9 +259,11 @@ public static class ReRankScorer
 
         float finalScore = model != null
             ? model.Score(fv)
-            : (luceneScore + proximityScore + (phraseBonus + subPhraseBonus) + densityScore + allTermsBonus
+            : (luceneScore + proximityScore + phraseBonus + subPhraseBonus + densityScore + allTermsBonus
                + freshnessScore + filetypeScore + folderDepthScore
-               + earlyScore + coverageScore);
+               + coverageScore
+               + closeGroupBonus
+               + headingScore);
 
 
         return new ReRankBreakdown(
@@ -282,33 +302,98 @@ public static class ReRankScorer
     }
     
     private static float ComputeSubPhraseBonus(string normText, List<string> qTokens)
+{
+    // Slop-baseret subphrase bonus:
+    // belønner bigrams/trigrams hvor ordene står tæt (ikke nødvendigvis direkte ved siden af)
+    if (qTokens.Count < 3) return 0f;
+
+    const int maxGapWords = 2;      // "et par ord imellem"
+    const float trigramBoost = 2.8f;
+    const float bigramBoost  = 1.4f;
+
+    const float maxBonus = 6.0f;
+
+    // let query-length normalisering (som I havde før-ish)
+    float qNorm = 1f / MathF.Max(1f, MathF.Log(1f + qTokens.Count));
+
+    // normText er allerede normaliseret og whitespace-splittet i ScoreDocument,
+    // men her får vi kun normText-string. Split den igen (ok performance for top-200).
+    var words = normText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    if (words.Length == 0) return 0f;
+
+    // Byg positions map: token -> positions
+    var pos = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+    for (int i = 0; i < words.Length; i++)
     {
-        // Boost for query sub-phrases (bigrams/trigrams)
-        // Example: "process control block pcb" rewards "process control block"
-        if (qTokens.Count < 3) return 0f;
-
-        const float trigramBoost = 2.5f; // strong
-        const float bigramBoost = 1.2f;  // mild
-
-        float bonus = 0f;
-
-        // 3-grams
-        for (int i = 0; i <= qTokens.Count - 3; i++)
+        var w = words[i];
+        if (!pos.TryGetValue(w, out var list))
         {
-            var tri = $"{qTokens[i]} {qTokens[i + 1]} {qTokens[i + 2]}";
-            if (normText.Contains(tri, StringComparison.Ordinal))
-                bonus += trigramBoost;
+            list = new List<int>();
+            pos[w] = list;
         }
-
-        // 2-grams
-        for (int i = 0; i <= qTokens.Count - 2; i++)
-        {
-            var bi = $"{qTokens[i]} {qTokens[i + 1]}";
-            if (normText.Contains(bi, StringComparison.Ordinal))
-                bonus += bigramBoost;
-        }
-
-        return bonus;
+        list.Add(i);
     }
+
+    bool NearBigram(string a, string b)
+    {
+        if (!pos.TryGetValue(a, out var pa) || !pos.TryGetValue(b, out var pb)) return false;
+
+        // two-pointer scan (pa og pb er sorterede)
+        int i = 0, j = 0;
+        while (i < pa.Count && j < pb.Count)
+        {
+            int A = pa[i];
+            int B = pb[j];
+
+            if (B > A)
+            {
+                int gap = B - A - 1;           // antal ord imellem
+                if (gap <= maxGapWords) return true;
+                i++;                            // prøv næste A (mere til højre)
+            }
+            else
+            {
+                j++;                            // B skal være efter A
+            }
+        }
+        return false;
+    }
+
+    bool NearTrigram(string a, string b, string c)
+    {
+        // Krav: a~b indenfor gap OG b~c indenfor gap (svagere, men god signal)
+        // Alternativt kunne man kræve a..c indenfor en samlet span, men dette fungerer fint.
+        return NearBigram(a, b) && NearBigram(b, c);
+    }
+
+    var matched = new HashSet<string>(StringComparer.Ordinal);
+    float bonus = 0f;
+
+    // Trigrams (unikke)
+    for (int i = 0; i <= qTokens.Count - 3; i++)
+    {
+        var a = qTokens[i];
+        var b = qTokens[i + 1];
+        var c = qTokens[i + 2];
+        var key = $"{a} {b} {c}";
+
+        if (matched.Add(key) && NearTrigram(a, b, c))
+            bonus += trigramBoost;
+    }
+
+    // Bigrams (unikke)
+    for (int i = 0; i <= qTokens.Count - 2; i++)
+    {
+        var a = qTokens[i];
+        var b = qTokens[i + 1];
+        var key = $"{a} {b}";
+
+        if (matched.Add(key) && NearBigram(a, b))
+            bonus += bigramBoost;
+    }
+
+    bonus *= qNorm;
+    return MathF.Min(bonus, maxBonus);
+}
 
 }

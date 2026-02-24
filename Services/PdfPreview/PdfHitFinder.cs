@@ -22,7 +22,7 @@ public static class PdfHitFinder
         return s;
     }
 
-    public static List<PdfHit> FindAllHits(string pdfPath, string rawQuery)
+    public static List<PdfHit> FindAllHits(string pdfPath, string rawQuery, IEnumerable<string>? extraTokens = null)
     {
         var hits = new List<PdfHit>();
         if (string.IsNullOrWhiteSpace(pdfPath) || string.IsNullOrWhiteSpace(rawQuery))
@@ -30,7 +30,29 @@ public static class PdfHitFinder
 
         var qNorm = Norm(rawQuery);
         var qTokens = qNorm.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        
+        if (extraTokens != null)
+        {
+            qTokens.AddRange(extraTokens
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => Norm(x)));
+            qTokens = qTokens.Distinct(StringComparer.Ordinal).ToList();
+        }
+        
         var hasPhrase = qTokens.Count >= 2;
+        
+        // Sub-phrases fra query (bigrams/trigrams) – i rækkefølge
+        var qBigrams = new List<string>();
+        var qTrigrams = new List<string>();
+
+        for (int i = 0; i <= qTokens.Count - 2; i++)
+            qBigrams.Add($"{qTokens[i]} {qTokens[i + 1]}");
+
+        for (int i = 0; i <= qTokens.Count - 3; i++)
+            qTrigrams.Add($"{qTokens[i]} {qTokens[i + 1]} {qTokens[i + 2]}");
+        
+        qBigrams = qBigrams.Distinct(StringComparer.Ordinal).ToList();
+        qTrigrams = qTrigrams.Distinct(StringComparer.Ordinal).ToList();
 
         using var doc = PdfDocument.Open(pdfPath);
 
@@ -46,12 +68,78 @@ public static class PdfHitFinder
             // normaliser hvert ord til token(s)
             // (nogle "words" kan indeholde tegn; vi splitter efter Norm)
             var flat = new List<(string token, Word word)>();
+            
             foreach (var w in words)
             {
                 var wn = Norm(w.Text);
                 if (string.IsNullOrWhiteSpace(wn)) continue;
                 foreach (var t in wn.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                     flat.Add((t, w));
+            }
+            
+            // A0) Trigram hits (højere end phrase og token)
+            if (qTrigrams.Count > 0)
+            {
+                for (int i = 0; i <= flat.Count - 3; i++)
+                {
+                    var tri = $"{flat[i].token} {flat[i + 1].token} {flat[i + 2].token}";
+                    if (!qTrigrams.Contains(tri, StringComparer.Ordinal)) continue;
+
+                    var wordsTri = new[] { flat[i].word, flat[i + 1].word, flat[i + 2].word }
+                        .Distinct()
+                        .ToList();
+
+                    var rects = wordsTri.Select(w => ToAvaloniaRect(w.BoundingBox)).ToArray();
+
+                    var firstWord = flat[i].word;
+                    var startIdx = words.IndexOf(firstWord);
+
+                    var ctx = startIdx >= 0
+                        ? BuildMicroContext(originalWordTexts, startIdx, Math.Max(1, wordsTri.Count))
+                        : $"… {tri} …";
+
+                    var penalty = ContextPenalty(ctx);
+
+                    hits.Add(new PdfHit(
+                        ++hitIndex,
+                        page.Number,
+                        rects,
+                        Score: (6.0f + EarlyBonus(page.Number, i)) - penalty,
+                        MatchedToken: tri,
+                        Context: ctx));
+                }
+            }
+            
+            if (qBigrams.Count > 0)
+            {
+                for (int i = 0; i <= flat.Count - 2; i++)
+                {
+                    var bi = $"{flat[i].token} {flat[i + 1].token}";
+                    if (!qBigrams.Contains(bi, StringComparer.Ordinal)) continue;
+
+                    var wordsBi = new[] { flat[i].word, flat[i + 1].word }
+                        .Distinct()
+                        .ToList();
+
+                    var rects = wordsBi.Select(w => ToAvaloniaRect(w.BoundingBox)).ToArray();
+
+                    var firstWord = flat[i].word;
+                    var startIdx = words.IndexOf(firstWord);
+
+                    var ctx = startIdx >= 0
+                        ? BuildMicroContext(originalWordTexts, startIdx, Math.Max(1, wordsBi.Count))
+                        : $"… {bi} …";
+
+                    var penalty = ContextPenalty(ctx);
+
+                    hits.Add(new PdfHit(
+                        ++hitIndex,
+                        page.Number,
+                        rects,
+                        Score: (4.0f + EarlyBonus(page.Number, i)) - penalty,
+                        MatchedToken: bi,
+                        Context: ctx));
+                }
             }
 
             // A) Phrase hits (sekvens)
@@ -132,7 +220,7 @@ public static class PdfHitFinder
             }
 
         }
-
+        hits = CollapseOverlappingHits(hits);
         return hits;
     }
 
@@ -198,4 +286,120 @@ public static class PdfHitFinder
         return 0.0f;
     }
 
+    private static float ContextPenalty(string ctx)
+    {
+        if (string.IsNullOrWhiteSpace(ctx)) return 0f;
+
+        var s = ctx.ToLowerInvariant();
+
+        // Lille "INDEX/TOC" penalty – kun til tie-break
+        float p = 0f;
+        if (s.Contains("index", StringComparison.Ordinal) || s.Contains("table of contents", StringComparison.Ordinal))
+            p += 0.6f;
+
+        // Høj digit-ratio (ofte index/tabeller) => lille penalty
+        int digits = 0, letters = 0;
+        foreach (var ch in s)
+        {
+            if (char.IsDigit(ch)) digits++;
+            else if (char.IsLetter(ch)) letters++;
+        }
+
+        if (letters > 0)
+        {
+            var ratio = digits / (float)(letters + digits);
+            if (ratio > 0.35f) p += 0.4f;
+        }
+
+        return p;
+    }
+    
+    private static List<PdfHit> CollapseOverlappingHits(List<PdfHit> hits)
+{
+    if (hits.Count <= 1) return hits;
+
+    // Sortér: bedste først (høj score), så længere match (flere ord), så lavere page
+    var ordered = hits
+        .OrderByDescending(h => h.Score)
+        .ThenByDescending(h => TokenCount(h.MatchedToken))
+        .ThenBy(h => h.PageNumber)
+        .ToList();
+
+    var kept = new List<PdfHit>();
+
+    foreach (var h in ordered)
+    {
+        bool overlaps = false;
+
+        foreach (var k in kept)
+        {
+            if (h.PageNumber != k.PageNumber) continue;
+
+            // Hvis hit-bounds overlapper meget, så er det samme “sted” i teksten
+            var a = Bounds(h);
+            var b = Bounds(k);
+
+            if (OverlapRatio(a, b) >= 0.45) // tune 0.35–0.60
+            {
+                overlaps = true;
+                break;
+            }
+        }
+
+        if (!overlaps)
+            kept.Add(h);
+    }
+
+    // Bevar original HitIndex rækkefølge-indekser er ikke vigtig her,
+    // PdfPreviewViewModel sorterer alligevel på Score.
+    return kept;
+}
+
+private static int TokenCount(string s)
+{
+    if (string.IsNullOrWhiteSpace(s)) return 0;
+    return s.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+}
+
+private static Rect Bounds(PdfHit h)
+{
+    if (h.Boxes == null || h.Boxes.Length == 0)
+        return new Rect(0, 0, 0, 0);
+
+    double left = h.Boxes[0].X;
+    double top = h.Boxes[0].Y;
+    double right = h.Boxes[0].X + h.Boxes[0].Width;
+    double bottom = h.Boxes[0].Y + h.Boxes[0].Height;
+
+    foreach (var r in h.Boxes)
+    {
+        left = Math.Min(left, r.X);
+        top = Math.Min(top, r.Y);
+        right = Math.Max(right, r.X + r.Width);
+        bottom = Math.Max(bottom, r.Y + r.Height);
+    }
+
+    return new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+}
+
+// overlap ratio = intersection area / min(areaA, areaB)
+// => “hvor meget dækker de samme område”
+private static double OverlapRatio(Rect a, Rect b)
+{
+    var ix1 = Math.Max(a.X, b.X);
+    var iy1 = Math.Max(a.Y, b.Y);
+    var ix2 = Math.Min(a.X + a.Width, b.X + b.Width);
+    var iy2 = Math.Min(a.Y + a.Height, b.Y + b.Height);
+
+    var iw = Math.Max(0, ix2 - ix1);
+    var ih = Math.Max(0, iy2 - iy1);
+    var inter = iw * ih;
+
+    var areaA = a.Width * a.Height;
+    var areaB = b.Width * b.Height;
+
+    if (areaA <= 0 || areaB <= 0) return 0;
+
+    return inter / Math.Min(areaA, areaB);
+}
 }
