@@ -15,6 +15,9 @@ public partial class MainWindow : Window
     private bool _isDraggingSidebar;
     private double _sidebarDragStartX;
     private double _sidebarDragStartWidth;
+    private bool _isDraggingHits;
+    private double _hitsDragStartY;
+    private double _hitsDragStartHeight;
 
     public MainWindow()
     {
@@ -148,6 +151,35 @@ public partial class MainWindow : Window
         if (!_isDraggingSidebar) return;
 
         _isDraggingSidebar = false;
+        e.Pointer.Capture(null);
+        e.Handled = true;
+    }
+
+    private void HitsSplitter_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.IsHitsPaneCollapsed) return;
+
+        _isDraggingHits = true;
+        _hitsDragStartY = e.GetPosition(MainLayoutGrid).Y;
+        _hitsDragStartHeight = vm.HitsPaneHeight;
+        e.Pointer.Capture(HitsSplitter);
+        e.Handled = true;
+    }
+
+    private void HitsSplitter_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isDraggingHits || DataContext is not MainWindowViewModel vm) return;
+
+        var currentY = e.GetPosition(MainLayoutGrid).Y;
+        vm.SetHitsPaneHeightFromDrag(_hitsDragStartHeight - (currentY - _hitsDragStartY));
+        e.Handled = true;
+    }
+
+    private void HitsSplitter_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_isDraggingHits) return;
+
+        _isDraggingHits = false;
         e.Pointer.Capture(null);
         e.Handled = true;
     }

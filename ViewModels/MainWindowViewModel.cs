@@ -25,6 +25,8 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private bool isRecentFoldersOpen = false;
     [ObservableProperty] private bool isFileFilterOpen = false;
     [ObservableProperty] private double sidebarWidth = 430;
+    [ObservableProperty] private bool isHitsPaneCollapsed = false;
+    [ObservableProperty] private double hitsPaneHeight = 240;
     [ObservableProperty] private PdfPreviewViewModel? currentPreview;
     private readonly List<SearchResultSummary> _allResults = new();
     private bool _isUpdatingFileFilters;
@@ -33,6 +35,10 @@ public partial class MainWindowViewModel : ObservableObject
     public bool HasResults => Results.Count > 0;
     public GridLength SidebarGridLength => IsResultsPaneOpen ? new GridLength(SidebarWidth) : new GridLength(0);
     public GridLength SplitterGridLength => IsResultsPaneOpen ? new GridLength(10) : new GridLength(0);
+    public GridLength HitsPaneGridLength => IsHitsPaneCollapsed ? new GridLength(42) : new GridLength(HitsPaneHeight);
+    public GridLength HitsSplitterGridLength => IsHitsPaneCollapsed ? new GridLength(0) : new GridLength(10);
+    public string HitsToggleText => IsHitsPaneCollapsed ? "▴" : "▾";
+    public bool IsHitsListVisible => !IsHitsPaneCollapsed;
     public string ResultCountText => Results.Count == 0 ? "No results yet" : $"{Results.Count} results";
     public string FileFilterButtonText => FileFilters.Count == 0
         ? "Files"
@@ -47,6 +53,17 @@ public partial class MainWindowViewModel : ObservableObject
         SidebarWidth = Math.Clamp(width, 320, 760);
     }
 
+    public void SetHitsPaneHeightFromDrag(double height)
+    {
+        HitsPaneHeight = Math.Clamp(height, 100, 600);
+    }
+
+    [RelayCommand]
+    private void ToggleHitsPane()
+    {
+        IsHitsPaneCollapsed = !IsHitsPaneCollapsed;
+    }
+
     partial void OnSidebarWidthChanged(double value)
     {
         OnPropertyChanged(nameof(SidebarGridLength));
@@ -56,6 +73,19 @@ public partial class MainWindowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(SidebarGridLength));
         OnPropertyChanged(nameof(SplitterGridLength));
+    }
+
+    partial void OnHitsPaneHeightChanged(double value)
+    {
+        OnPropertyChanged(nameof(HitsPaneGridLength));
+    }
+
+    partial void OnIsHitsPaneCollapsedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(HitsPaneGridLength));
+        OnPropertyChanged(nameof(HitsSplitterGridLength));
+        OnPropertyChanged(nameof(HitsToggleText));
+        OnPropertyChanged(nameof(IsHitsListVisible));
     }
 
     [RelayCommand]

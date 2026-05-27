@@ -22,7 +22,14 @@
         <!-- RESULTS PANE -->
         <Grid Grid.Column="0"
               IsVisible="{Binding IsResultsPaneOpen}">
-          <Grid RowDefinitions="Auto,Auto,*"
+          <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="{Binding HitsSplitterGridLength}" MinHeight="0"/>
+            <RowDefinition Height="{Binding HitsPaneGridLength}" MinHeight="0"/>
+          </Grid.RowDefinitions>
+
+          <Grid Grid.Row="0"
+                RowDefinitions="Auto,Auto,*"
                 RowSpacing="6">
 
       <!-- COMPACT COMMAND SURFACE (kun venstre side nu) -->
@@ -123,12 +130,9 @@
         </StackPanel>
       </Border>
 
-      <!-- RESULTS + HITS -->
-      <Border Grid.Row="2" Classes="GlassCard PaneBody" Padding="12">
-    <Grid RowDefinitions="*,*" RowSpacing="12">
-
       <!-- RESULTS -->
-      <Grid Grid.Row="0" RowDefinitions="Auto,Auto,*" RowSpacing="10">
+      <Border Grid.Row="2" Classes="GlassCard PaneBody" Padding="12">
+      <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Text="Resultater" FontWeight="SemiBold" FontSize="16"/>
           <TextBlock Grid.Column="1"
@@ -239,45 +243,82 @@
           </ListBox>
         </ScrollViewer>
       </Grid>
-
-      <!-- HITS -->
-      <Grid Grid.Row="1" RowDefinitions="Auto,*" RowSpacing="10">
-        <TextBlock Text="Hits" FontWeight="SemiBold" FontSize="16"/>
-
-        <ScrollViewer Grid.Row="1"
-                      VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
-          <ListBox Classes="GlassList"
-                   ItemsSource="{Binding CurrentPreview.SidebarItems}"
-                   SelectedItem="{Binding CurrentPreview.SelectedSidebarItem}">
-
-            <ListBox.ItemTemplate>
-              <DataTemplate>
-                <Border Classes="GlassItemCard" Padding="10">
-                  <StackPanel Spacing="6">
-                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
-                    <TextBlock Text="{Binding Context}" Opacity="0.85" TextWrapping="Wrap"/>
-                  </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-
-            <ListBox.ItemContainerTheme>
-              <ControlTheme TargetType="ListBoxItem">
-                <Setter Property="Padding" Value="0"/>
-                <Setter Property="Margin" Value="0,0,0,8"/>
-                <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="BorderThickness" Value="0"/>
-              </ControlTheme>
-            </ListBox.ItemContainerTheme>
-          </ListBox>
-        </ScrollViewer>
-      </Grid>
-
-    </Grid>
-  </Border>
+      </Border>
 
           </Grid>
+
+          <!-- HITS DRAG HANDLE -->
+          <Border x:Name="HitsSplitter"
+                  Grid.Row="1"
+                  Background="#00000000"
+                  Cursor="SizeNorthSouth"
+                  PointerPressed="HitsSplitter_PointerPressed"
+                  PointerMoved="HitsSplitter_PointerMoved"
+                  PointerReleased="HitsSplitter_PointerReleased">
+            <Border Height="6"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Center"
+                    Background="#18FFFFFF"
+                    CornerRadius="3">
+              <StackPanel Orientation="Horizontal"
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Center"
+                          Spacing="4">
+                <Border Width="24" Height="3" Background="#70FFFFFF" CornerRadius="2"/>
+                <Border Width="24" Height="3" Background="#70FFFFFF" CornerRadius="2"/>
+                <Border Width="24" Height="3" Background="#70FFFFFF" CornerRadius="2"/>
+              </StackPanel>
+            </Border>
+          </Border>
+
+          <!-- HITS -->
+          <Border Grid.Row="2" Classes="GlassCard PaneBody" Padding="12">
+            <Grid RowDefinitions="Auto,*" RowSpacing="10">
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Button Classes="GlassButton"
+                        Content="{Binding HitsToggleText}"
+                        Width="34"
+                        Padding="0"
+                        Command="{Binding ToggleHitsPaneCommand}"/>
+                <TextBlock Grid.Column="1"
+                           Text="Hits"
+                           FontWeight="SemiBold"
+                           FontSize="16"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"/>
+              </Grid>
+
+              <ScrollViewer Grid.Row="1"
+                            IsVisible="{Binding IsHitsListVisible}"
+                            VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled">
+                <ListBox Classes="GlassList"
+                         ItemsSource="{Binding CurrentPreview.SidebarItems}"
+                         SelectedItem="{Binding CurrentPreview.SelectedSidebarItem}">
+
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <Border Classes="GlassItemCard" Padding="10">
+                        <StackPanel Spacing="6">
+                          <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+                          <TextBlock Text="{Binding Context}" Opacity="0.85" TextWrapping="Wrap"/>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+
+                  <ListBox.ItemContainerTheme>
+                    <ControlTheme TargetType="ListBoxItem">
+                      <Setter Property="Padding" Value="0"/>
+                      <Setter Property="Margin" Value="0,0,0,8"/>
+                      <Setter Property="Background" Value="Transparent"/>
+                      <Setter Property="BorderThickness" Value="0"/>
+                    </ControlTheme>
+                  </ListBox.ItemContainerTheme>
+                </ListBox>
+              </ScrollViewer>
+            </Grid>
+          </Border>
         </Grid>
 
         <!-- DRAG HANDLE -->
@@ -384,14 +425,14 @@
 
               <!-- Preview content -->
               <Border Grid.Row="1" Classes="GlassCard" Padding="12">
-                <Viewbox Stretch="Uniform"
-                         StretchDirection="Both"
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Center">
-                  <Grid Width="{Binding CurrentPreview.PagePixelWidth}"
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto">
+                  <Grid HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Width="{Binding CurrentPreview.PagePixelWidth}"
                         Height="{Binding CurrentPreview.PagePixelHeight}">
                     <Image Source="{Binding CurrentPreview.PageBitmap}"
-                           Stretch="Fill"
+                           Stretch="None"
                            Width="{Binding CurrentPreview.PagePixelWidth}"
                            Height="{Binding CurrentPreview.PagePixelHeight}"/>
                     <Canvas x:Name="MainOverlayCanvas"
@@ -400,7 +441,7 @@
                             Width="{Binding CurrentPreview.PagePixelWidth}"
                             Height="{Binding CurrentPreview.PagePixelHeight}" />
                   </Grid>
-                </Viewbox>
+                </ScrollViewer>
               </Border>
             </Grid>
 

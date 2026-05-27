@@ -39,9 +39,6 @@
 
   <ItemGroup>
     <None Remove="Resources\synonyms.txt" />
-    <Content Include="Resources\synonyms.txt">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
     <None Remove="Resources\stopwords_en.txt" />
     <Content Include="Resources\stopwords_en.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
