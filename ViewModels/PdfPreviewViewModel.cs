@@ -92,7 +92,7 @@ public partial class PdfPreviewViewModel : ObservableObject
         _hits.Count == 0 ? $"0 hits (Side {CurrentPage})"
             : $"{CurrentHitIndex + 1}/{_hits.Count} (Side {_hits[CurrentHitIndex].PageNumber})";
 
-    public PdfPreviewViewModel(string pdfPath, string rawQuery, int? startAtHit = null)
+    public PdfPreviewViewModel(string pdfPath, string rawQuery, int? startAtHit = null, int? preferredPage = null)
     {
         _pdfPath = pdfPath;
 
@@ -131,12 +131,20 @@ public partial class PdfPreviewViewModel : ObservableObject
 
         if (_hits.Count == 0)
         {
-            CurrentPage = 1;
+            CurrentPage = preferredPage.HasValue
+                ? Math.Clamp(preferredPage.Value, 1, Math.Max(1, _pageCount))
+                : 1;
             Render();
             return;
         }
 
-        CurrentHitIndex = Math.Clamp(startAtHit ?? 0, 0, _hits.Count - 1);
+        var preferredHitIndex = preferredPage.HasValue
+            ? _hits.FindIndex(h => h.PageNumber == preferredPage.Value)
+            : -1;
+
+        CurrentHitIndex = preferredHitIndex >= 0
+            ? preferredHitIndex
+            : Math.Clamp(startAtHit ?? 0, 0, _hits.Count - 1);
         CurrentPage = _hits[CurrentHitIndex].PageNumber;
         Render();
         UpdateOverlay();

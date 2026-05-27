@@ -11,7 +11,10 @@ public class FileCrawler
         new(StringComparer.OrdinalIgnoreCase)
         {
             ".txt",
-            ".pdf"
+            ".md",
+            ".markdown",
+            ".pdf",
+            ".docx"
         };
 
     public IEnumerable<string> GetFiles(string rootFolder)

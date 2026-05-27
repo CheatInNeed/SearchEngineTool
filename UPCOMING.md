@@ -36,8 +36,7 @@
 ---
 
 ## File Support
-- DOCX support
-- Markdown support
+- OCR support for scanned PDFs
 - HTML extraction
 
 ---

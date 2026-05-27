@@ -4,6 +4,8 @@ namespace FileSearchTool.Models;
 
 public record FolderItem(string FullPath)
 {
+    public string DisplayPath => FullPath;
+
     public string Name
     {
         get

@@ -9,7 +9,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using FileSearchTool.Models;
-using FileSearchTool.Services.TextExtraction;
 using System.Threading;
 using Lucene.Net.Analysis.Util;
 using Lucene.Net.Analysis.Miscellaneous;
@@ -55,11 +54,13 @@ public class IndexedSearchService
             var fileSet = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
 
             // Hent ticks fra index (hvis findes)
-            var indexedTicks = _luceneIndexService.IndexExists(rootFolder)
+            var indexExists = _luceneIndexService.IndexExists(rootFolder);
+            var forceReindexForPageMetadata = indexExists && !_luceneIndexService.HasPageNumberMetadata(rootFolder);
+            var indexedTicks = indexExists && !forceReindexForPageMetadata
                 ? _luceneIndexService.GetIndexedLastModifiedTicks(rootFolder)
                 : new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
-            var docs = new List<(string path, string content, int chunkIndex)>();
+            var docs = new List<(string path, string content, int chunkIndex, int? pageNumber)>();
 
             foreach (var file in files)
             {
@@ -71,16 +72,25 @@ public class IndexedSearchService
                     if (indexedTicks.TryGetValue(file, out var oldTicks) && oldTicks == currentTicks)
                         continue;
 
-                    var extractor = TextExtractorFactory.Create(file);
-                    var text = extractor.ExtractText(file);
-
-                    if (!string.IsNullOrWhiteSpace(text))
+                    if (string.Equals(Path.GetExtension(file), ".pdf", StringComparison.OrdinalIgnoreCase))
                     {
-                        var chunks = TextChunker.ToChunks(text, targetChars: 1200, overlapChars: 150);
+                        var pdfExtractor = new PdfTextExtractor();
+                        foreach (var page in pdfExtractor.ExtractPages(file))
+                            docs.Add((path: file, content: page.Text, chunkIndex: page.PageNumber - 1, pageNumber: page.PageNumber));
+                    }
+                    else
+                    {
+                        var extractor = TextExtractorFactory.Create(file);
+                        var text = extractor.ExtractText(file);
 
-                        for (int i = 0; i < chunks.Count; i++)
+                        if (!string.IsNullOrWhiteSpace(text))
                         {
-                            docs.Add((path: file, content: chunks[i], chunkIndex: i));
+                            var chunks = TextChunker.ToChunks(text, targetChars: 1200, overlapChars: 150);
+
+                            for (int i = 0; i < chunks.Count; i++)
+                            {
+                                docs.Add((path: file, content: chunks[i], chunkIndex: i, pageNumber: null));
+                            }
                         }
                     }
                 }
@@ -139,7 +149,7 @@ public class IndexedSearchService
 
         var (N, dfByTerm) = _luceneStatsService.GetDocFreqs(rootFolder, qTokens, field: "content");
         
-        foreach (var (path, luceneScore, storedContent, ext, ticks, size, depth, hash) in hits)
+        foreach (var (path, luceneScore, storedContent, ext, ticks, size, depth, hash, pageNumber) in hits)
         {
             try
             {
@@ -163,7 +173,7 @@ public class IndexedSearchService
                 }
                 
             }
-            catch (Exception e)
+            catch
             {
                 
             }
@@ -206,7 +216,7 @@ public class IndexedSearchService
 
     // Hvis du udvider SearchResultSummary til at bære hash senere, så group på hash.
     // Lige nu kan du i stedet collapse på "path" (ingen effekt) – bedst at udvide summary med hash.
-    foreach (var (path, luceneScore, storedContent, ext, ticks, size, depth, hash) in hits)
+    foreach (var (path, luceneScore, storedContent, ext, ticks, size, depth, hash, pageNumber) in hits)
     {
         try
         {
@@ -221,6 +231,8 @@ public class IndexedSearchService
 
             scored.Add(new SearchResultSummary(
                 FilePath: path,
+                PageNumber: pageNumber,
+                SnippetParts: SnippetMaker.MakeHighlightedSnippetParts(text, query, analyzedTokens),
                 FinalScore: breakdown.FinalScore,
                 LuceneScore: breakdown.LuceneScore,
                 ProximityScore: breakdown.ProximityScore,
@@ -243,6 +255,10 @@ public class IndexedSearchService
             // If re-rank fails for a doc, keep Lucene baseline (don’t drop result)
             scored.Add(new SearchResultSummary(
                 FilePath: path,
+                PageNumber: pageNumber,
+                SnippetParts: !string.IsNullOrWhiteSpace(storedContent)
+                    ? SnippetMaker.MakeHighlightedSnippetParts(storedContent!, query, analyzedTokens)
+                    : new[] { new SnippetPart("No snippet available.", false) },
                 FinalScore: luceneScore,
                 LuceneScore: luceneScore,
                 ProximityScore: 0,
@@ -263,7 +279,7 @@ public class IndexedSearchService
     }
 
     return scored
-        .GroupBy(x => x.FilePath, StringComparer.OrdinalIgnoreCase)
+        .GroupBy(x => x.PageNumber.HasValue ? $"{x.FilePath}#{x.PageNumber.Value}" : x.FilePath, StringComparer.OrdinalIgnoreCase)
         .Select(g => g.OrderByDescending(x => x.FinalScore).First())
         .OrderByDescending(x => x.FinalScore)
         .Take(50)

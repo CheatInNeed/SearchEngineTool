@@ -16,6 +16,9 @@ public static class TextExtractorFactory
         {
             ".pdf" => new PdfTextExtractor(),
             ".txt" => new PlainTextExtractor(),
+            ".md" => new PlainTextExtractor(),
+            ".markdown" => new PlainTextExtractor(),
+            ".docx" => new DocxTextExtractor(),
             _ => throw new NotSupportedException()
 
         };

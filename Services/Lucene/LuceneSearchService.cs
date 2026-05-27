@@ -21,11 +21,11 @@ public class LuceneSearchService
     private const string FieldContentHash = "contentHash";
     private const string FieldParentPath = "parentPath";
     private const string FieldChunkIndex = "chunkIndex";
+    private const string FieldPageNumber = "pageNumber";
 
 
     private readonly LuceneIndexPaths _indexPaths;
     private readonly LuceneQueryBuilder _queryBuilder;
-    private readonly LuceneVersion _version = LuceneVersion.LUCENE_48;
 
     public LuceneSearchService(LuceneIndexPaths indexPaths, Analyzer analyzer)
     {
@@ -39,12 +39,12 @@ public class LuceneSearchService
     /// Searches the Lucene index for the given folder and query.
     /// Returns (path, score, storedContent) where storedContent may be null if not stored in the index.
     /// </summary>
-    public List<(string path, float score, string? storedContent, string ext, long lastModifiedTicks, long fileSizeBytes, int folderDepth, string contentHash)> Search(
+    public List<(string path, float score, string? storedContent, string ext, long lastModifiedTicks, long fileSizeBytes, int folderDepth, string contentHash, int? pageNumber)> Search(
         string rootFolder,
         string rawQuery,
         int topN = 200)
     {
-        var results = new List<(string path, float score, string? storedContent, string ext, long lastModifiedTicks, long fileSizeBytes, int folderDepth, string contentHash)>();
+        var results = new List<(string path, float score, string? storedContent, string ext, long lastModifiedTicks, long fileSizeBytes, int folderDepth, string contentHash, int? pageNumber)>();
 
         if (string.IsNullOrWhiteSpace(rootFolder))
             return results;
@@ -69,7 +69,7 @@ public class LuceneSearchService
             
             var searcher = new IndexSearcher(reader);
 
-            var query = _queryBuilder.Build(rawQuery);
+            var query = _queryBuilder.Build(rawQuery, reader);
 
             var topDocs = searcher.Search(query, topN);
 
@@ -91,8 +91,11 @@ public class LuceneSearchService
                 long.TryParse(doc.Get(FieldFileSizeBytes) ?? "0", out var size);
                 int.TryParse(doc.Get(FieldFolderDepth) ?? "0", out var depth);
                 var hash = doc.Get(FieldContentHash) ?? "";
+                var pageField = doc.GetField(FieldPageNumber);
+                var pageValue = pageField?.GetInt32Value() ?? 0;
+                int? pageNumber = pageValue > 0 ? pageValue : null;
 
-                results.Add((path, sd.Score, content, ext, ticks, size, depth, hash));
+                results.Add((path, sd.Score, content, ext, ticks, size, depth, hash, pageNumber));
             }
         }
         catch

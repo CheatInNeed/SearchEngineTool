@@ -4,7 +4,7 @@
         x:Class="FileSearchTool.MainWindow"
         x:Name="Root"
         x:DataType="vm:MainWindowViewModel"
-        Title="SearchEngineTool" Width="1400" Height="700"
+        Title="FileSearchTool" Width="1400" Height="760"
         Background="Transparent"
         TransparencyLevelHint="AcrylicBlur,Blur">
 
@@ -12,15 +12,16 @@
     <DockPanel Margin="16">
 
       <!-- MAIN CONTENT -->
-      <SplitView IsPaneOpen="{Binding IsResultsPaneOpen}"
-                 OpenPaneLength="380"
-                 CompactPaneLength="0"
-                 DisplayMode="Inline"
-                 Background="{DynamicResource AppBackgroundBrush}"
-                 PaneBackground="{DynamicResource AppBackgroundBrush}">
+      <Grid x:Name="MainLayoutGrid">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="{Binding SidebarGridLength}" MinWidth="0"/>
+          <ColumnDefinition Width="{Binding SplitterGridLength}" MinWidth="0"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
         <!-- RESULTS PANE -->
-        <SplitView.Pane>
+        <Grid Grid.Column="0"
+              IsVisible="{Binding IsResultsPaneOpen}">
           <Grid RowDefinitions="Auto,Auto,*"
                 RowSpacing="6">
 
@@ -28,7 +29,6 @@
       <Border Grid.Row="0" Classes="GlassCard GlassCardStrong PaneHeader" Padding="12">
         <StackPanel Spacing="14">
 
-          <!-- ROW 2: Seneste mapper -->
           <Button Classes="GlassButton"
                   Content="Seneste mapper"
                   HorizontalAlignment="Left"
@@ -43,6 +43,7 @@
 
             <TextBox Grid.Column="1"
                      Classes="GlassTextBox GlassTextBoxDark"
+                     Watermark="Choose a folder with allowed exam materials"
                      Text="{Binding SelectedFolder}"/>
 
             <Button Grid.Column="2"
@@ -61,6 +62,7 @@
 
             <TextBox Grid.Column="1"
                      Classes="GlassTextBox GlassTextBoxDark"
+                     Watermark="Search a term, phrase, or sentence"
                      Text="{Binding Query}"
                      KeyDown="QueryBox_KeyDown"/>
 
@@ -75,6 +77,9 @@
           <TextBlock Text="{Binding Status}"
                      Opacity="0.80"
                      TextWrapping="Wrap"/>
+          <TextBlock Text="{Binding SupportedFileTypesText}"
+                     Opacity="0.65"
+                     FontSize="12"/>
         </StackPanel>
       </Border>
 
@@ -98,7 +103,10 @@
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Border Classes="GlassItemCard" Padding="10">
-                  <TextBlock Text="{Binding Name}" TextWrapping="Wrap"/>
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding DisplayPath}" Opacity="0.68" FontSize="12" TextWrapping="Wrap"/>
+                  </StackPanel>
                 </Border>
               </DataTemplate>
             </ListBox.ItemTemplate>
@@ -115,15 +123,71 @@
         </StackPanel>
       </Border>
 
-      <!-- RESULTS + HITS (side-by-side) -->
+      <!-- RESULTS + HITS -->
       <Border Grid.Row="2" Classes="GlassCard PaneBody" Padding="12">
-    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+    <Grid RowDefinitions="*,*" RowSpacing="12">
 
       <!-- RESULTS -->
-      <Grid Grid.Column="0" RowDefinitions="Auto,*" RowSpacing="10">
-        <TextBlock Text="Resultater" FontWeight="SemiBold" FontSize="16"/>
+      <Grid Grid.Row="0" RowDefinitions="Auto,Auto,*" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="Resultater" FontWeight="SemiBold" FontSize="16"/>
+          <TextBlock Grid.Column="1"
+                     Text="{Binding ResultCountText}"
+                     Opacity="0.70"
+                     VerticalAlignment="Center"/>
+        </Grid>
 
-        <ScrollViewer Grid.Row="1"
+        <Grid Grid.Row="1" RowDefinitions="Auto,Auto" RowSpacing="8">
+          <Button Classes="GlassButton"
+                  Content="{Binding FileFilterButtonText}"
+                  HorizontalAlignment="Left"
+                  Command="{Binding ToggleFileFilterCommand}"/>
+
+          <Border Grid.Row="1"
+                  IsVisible="{Binding IsFileFilterOpen}"
+                  Classes="GlassCard"
+                  Padding="10">
+            <Grid RowDefinitions="Auto,*" RowSpacing="8"
+                  MaxHeight="220">
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <TextBlock Text="Filter files"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1"
+                        Classes="GlassButton"
+                        Content="All"
+                        Command="{Binding SelectAllFilesCommand}"/>
+                <Button Grid.Column="2"
+                        Classes="GlassButton"
+                        Content="None"
+                        Command="{Binding ClearFileFiltersCommand}"/>
+              </Grid>
+
+              <ScrollViewer Grid.Row="1"
+                            VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding FileFilters}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <CheckBox IsChecked="{Binding IsIncluded}"
+                                Margin="0,0,0,8">
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="{Binding DisplayName}" TextWrapping="Wrap"/>
+                          <TextBlock Text="{Binding FolderName}"
+                                     Opacity="0.65"
+                                     FontSize="12"
+                                     TextWrapping="Wrap"/>
+                        </StackPanel>
+                      </CheckBox>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Grid>
+          </Border>
+        </Grid>
+
+        <ScrollViewer Grid.Row="2"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
           <ListBox Classes="GlassList"
@@ -135,8 +199,30 @@
               <DataTemplate>
                 <Border Classes="GlassItemCard" Padding="10">
                   <StackPanel Spacing="6">
-                    <TextBlock Text="{Binding FileName}" FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding HitSummary}" Opacity="0.85" TextWrapping="Wrap"/>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                      <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                      <TextBlock Grid.Column="1"
+                                 Text="{Binding PageLabel}"
+                                 IsVisible="{Binding HasPageNumber}"
+                                 Opacity="0.80"
+                                 FontWeight="SemiBold"/>
+                    </Grid>
+                    <TextBlock Text="{Binding FolderName}" Opacity="0.68" FontSize="12" TextWrapping="Wrap"/>
+                    <ItemsControl ItemsSource="{Binding SnippetParts}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel/>
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding Text}"
+                                     FontWeight="{Binding FontWeight}"
+                                     Background="{Binding Background}"
+                                     TextWrapping="Wrap"/>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                   </StackPanel>
                 </Border>
               </DataTemplate>
@@ -155,7 +241,7 @@
       </Grid>
 
       <!-- HITS -->
-      <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="10">
+      <Grid Grid.Row="1" RowDefinitions="Auto,*" RowSpacing="10">
         <TextBlock Text="Hits" FontWeight="SemiBold" FontSize="16"/>
 
         <ScrollViewer Grid.Row="1"
@@ -192,11 +278,34 @@
   </Border>
 
           </Grid>
-        </SplitView.Pane>
+        </Grid>
+
+        <!-- DRAG HANDLE -->
+        <Border x:Name="SidebarSplitter"
+                Grid.Column="1"
+                IsVisible="{Binding IsResultsPaneOpen}"
+                Background="#00000000"
+                Cursor="SizeWestEast"
+                PointerPressed="SidebarSplitter_PointerPressed"
+                PointerMoved="SidebarSplitter_PointerMoved"
+                PointerReleased="SidebarSplitter_PointerReleased">
+          <Border Width="6"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Stretch"
+                  Background="#18FFFFFF"
+                  CornerRadius="3">
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Spacing="4">
+              <Border Width="3" Height="24" Background="#70FFFFFF" CornerRadius="2"/>
+              <Border Width="3" Height="24" Background="#70FFFFFF" CornerRadius="2"/>
+              <Border Width="3" Height="24" Background="#70FFFFFF" CornerRadius="2"/>
+            </StackPanel>
+          </Border>
+        </Border>
 
         <!-- RIGHT SIDE -->
-        <SplitView.Content>
-          <Grid Margin="12,0,0,0">
+        <Grid Grid.Column="2" Margin="12,0,0,0">
 
             <!-- Placeholder (no preview) -->
             <Border IsVisible="{Binding HasNoPreview}"
@@ -220,13 +329,6 @@
                 <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto"
                       ColumnSpacing="10">
                   
-                  <Button Grid.Column="0"
-                          Classes="GlassButton"
-                          Content="☰"
-                          Width="44"
-                          Command="{Binding ToggleResultsPaneCommand}"/>
-
-                  <!-- ALWAYS VISIBLE BURGER -->
                   <Button Grid.Column="0"
                           Classes="GlassButton"
                           Content="☰"
@@ -263,6 +365,11 @@
                           Content="+"
                           Command="{Binding CurrentPreview.ZoomInCommand}"/>
 
+                  <Button Grid.Column="7"
+                          Classes="GlassButton"
+                          Content="100%"
+                          Command="{Binding CurrentPreview.ZoomResetCommand}"/>
+
                   <TextBlock Grid.Column="8"
                              VerticalAlignment="Center"
                              Opacity="0.82"
@@ -277,26 +384,28 @@
 
               <!-- Preview content -->
               <Border Grid.Row="1" Classes="GlassCard" Padding="12">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Auto">
-                  <Grid>
+                <Viewbox Stretch="Uniform"
+                         StretchDirection="Both"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center">
+                  <Grid Width="{Binding CurrentPreview.PagePixelWidth}"
+                        Height="{Binding CurrentPreview.PagePixelHeight}">
                     <Image Source="{Binding CurrentPreview.PageBitmap}"
-                           Stretch="None"
+                           Stretch="Fill"
                            Width="{Binding CurrentPreview.PagePixelWidth}"
-                           Height="{Binding CurrentPreview.PagePixelHeight}" />
+                           Height="{Binding CurrentPreview.PagePixelHeight}"/>
                     <Canvas x:Name="MainOverlayCanvas"
                             Canvas.ZIndex="10"
                             IsHitTestVisible="False"
                             Width="{Binding CurrentPreview.PagePixelWidth}"
                             Height="{Binding CurrentPreview.PagePixelHeight}" />
                   </Grid>
-                </ScrollViewer>
+                </Viewbox>
               </Border>
             </Grid>
 
-          </Grid>
-        </SplitView.Content>
-      </SplitView>
+        </Grid>
+      </Grid>
 
     </DockPanel>
   </Border>

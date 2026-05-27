@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FileSearchTool.Models;
@@ -13,27 +17,61 @@ namespace FileSearchTool.ViewModels;
 public partial class MainWindowViewModel : ObservableObject
 {
     private readonly IndexedSearchService _searchService = new IndexedSearchService();
+    private readonly FileCrawler _fileCrawler = new FileCrawler();
     [ObservableProperty] private string? selectedFolder;
     [ObservableProperty] private string status = "Vælg en mappe og søg.";
     [ObservableProperty] private string? query;
     [ObservableProperty] private bool isResultsPaneOpen = true;
     [ObservableProperty] private bool isRecentFoldersOpen = false;
+    [ObservableProperty] private bool isFileFilterOpen = false;
+    [ObservableProperty] private double sidebarWidth = 430;
     [ObservableProperty] private PdfPreviewViewModel? currentPreview;
+    private readonly List<SearchResultSummary> _allResults = new();
+    private bool _isUpdatingFileFilters;
     public bool HasPreview => CurrentPreview != null;
     public bool HasNoPreview => CurrentPreview == null;
+    public bool HasResults => Results.Count > 0;
+    public GridLength SidebarGridLength => IsResultsPaneOpen ? new GridLength(SidebarWidth) : new GridLength(0);
+    public GridLength SplitterGridLength => IsResultsPaneOpen ? new GridLength(10) : new GridLength(0);
+    public string ResultCountText => Results.Count == 0 ? "No results yet" : $"{Results.Count} results";
+    public string FileFilterButtonText => FileFilters.Count == 0
+        ? "Files"
+        : $"{FileFilters.Count(x => x.IsIncluded)}/{FileFilters.Count} files";
+    public string SupportedFileTypesText => "PDF, TXT, Markdown, DOCX";
     
     [RelayCommand]
     private void ToggleResultsPane() => IsResultsPaneOpen = !IsResultsPaneOpen;
 
+    public void SetSidebarWidthFromDrag(double width)
+    {
+        SidebarWidth = Math.Clamp(width, 320, 760);
+    }
+
+    partial void OnSidebarWidthChanged(double value)
+    {
+        OnPropertyChanged(nameof(SidebarGridLength));
+    }
+
+    partial void OnIsResultsPaneOpenChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SidebarGridLength));
+        OnPropertyChanged(nameof(SplitterGridLength));
+    }
+
     [RelayCommand]
     private void ToggleRecentFolders() => IsRecentFoldersOpen = !IsRecentFoldersOpen;
+
+    [RelayCommand]
+    private void ToggleFileFilter() => IsFileFilterOpen = !IsFileFilterOpen;
+
     public ObservableCollection<SearchResultSummary> Results { get; } = new();
+    public ObservableCollection<FileFilterItem> FileFilters { get; } = new();
     
     [RelayCommand]
     private void OpenSelectedPreview()
     {
         if (SelectedResult == null) return;
-        OpenPreviewForResult(SelectedResult);
+        OpenResult(SelectedResult);
     }
 
     [ObservableProperty] private SearchResultSummary? selectedResult;
@@ -52,6 +90,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         AddRecentFolder(value);
+        RebuildFileFiltersFromFolder(value);
 
         _ = IndexFolderAsync(value);
     }
@@ -119,9 +158,10 @@ public partial class MainWindowViewModel : ObservableObject
 
             var found = await _searchService.SearchSummaryAsync(SelectedFolder, Query);
 
-            Results.Clear();
-            foreach (var r in found)
-                Results.Add(r);
+            _allResults.Clear();
+            _allResults.AddRange(found);
+            UpdateFileFilterResultCounts(_allResults);
+            ApplyResultFilter();
 
             // Vælg bedste dokument (allerøverst)
             SelectedResult = Results.FirstOrDefault();
@@ -150,6 +190,88 @@ public partial class MainWindowViewModel : ObservableObject
             Status = "Fejl under søgning.";
         }
     }
+
+    [RelayCommand]
+    private void SelectAllFiles()
+    {
+        SetAllFileFilters(true);
+    }
+
+    [RelayCommand]
+    private void ClearFileFilters()
+    {
+        SetAllFileFilters(false);
+    }
+
+    private void SetAllFileFilters(bool value)
+    {
+        _isUpdatingFileFilters = true;
+        try
+        {
+            foreach (var item in FileFilters)
+                item.IsIncluded = value;
+        }
+        finally
+        {
+            _isUpdatingFileFilters = false;
+        }
+
+        ApplyResultFilter();
+    }
+
+    private void RebuildFileFiltersFromFolder(string folder)
+    {
+        foreach (var item in FileFilters)
+            item.PropertyChanged -= FileFilterOnPropertyChanged;
+
+        FileFilters.Clear();
+
+        foreach (var item in _fileCrawler.GetFiles(folder)
+                     .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                     .Select(path => new FileFilterItem(path, 0)))
+        {
+            item.PropertyChanged += FileFilterOnPropertyChanged;
+            FileFilters.Add(item);
+        }
+
+        OnPropertyChanged(nameof(FileFilterButtonText));
+    }
+
+    private void UpdateFileFilterResultCounts(IEnumerable<SearchResultSummary> results)
+    {
+        var counts = results
+            .GroupBy(x => x.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in FileFilters)
+            item.ResultCount = counts.TryGetValue(item.FilePath, out var count) ? count : 0;
+    }
+
+    private void FileFilterOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_isUpdatingFileFilters || e.PropertyName != nameof(FileFilterItem.IsIncluded))
+            return;
+
+        ApplyResultFilter();
+    }
+
+    private void ApplyResultFilter()
+    {
+        var included = FileFilters
+            .Where(x => x.IsIncluded)
+            .Select(x => x.FilePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Results.Clear();
+        foreach (var result in _allResults.Where(x => included.Contains(x.FilePath)))
+            Results.Add(result);
+
+        OnPropertyChanged(nameof(HasResults));
+        OnPropertyChanged(nameof(ResultCountText));
+        OnPropertyChanged(nameof(FileFilterButtonText));
+
+        SelectedResult = Results.FirstOrDefault();
+    }
     
     private void OpenPreviewForResult(SearchResultSummary r)
     {
@@ -160,7 +282,27 @@ public partial class MainWindowViewModel : ObservableObject
             return;
 
         // start ALTID på bedste hit (0) – dit hit-list bliver sorteret i PdfPreviewViewModel
-        CurrentPreview = new PdfPreviewViewModel(path, Query!, startAtHit: 0);
+        CurrentPreview = new PdfPreviewViewModel(path, Query!, startAtHit: 0, preferredPage: r.PageNumber);
+    }
+
+    private void OpenResult(SearchResultSummary r)
+    {
+        var path = r.FilePath;
+        if (string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenPreviewForResult(r);
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            Status = $"Åbnede {Path.GetFileName(path)}.";
+        }
+        catch
+        {
+            Status = "Kunne ikke åbne filen.";
+        }
     }
     
     partial void OnCurrentPreviewChanged(PdfPreviewViewModel? value)

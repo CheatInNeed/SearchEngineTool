@@ -16,6 +16,8 @@ including proximity scoring, phrase detection, metadata boosting, and PDF hit vi
 - Supported file types:
     - `.pdf`
     - `.txt`
+    - `.md` / `.markdown`
+    - `.docx`
 - Per-folder Lucene index stored in AppData
 
 ---

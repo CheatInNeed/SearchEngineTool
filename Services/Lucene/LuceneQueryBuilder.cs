@@ -19,19 +19,26 @@ public class LuceneQueryBuilder
     private const string FieldContentInfix = "contentInfix";
 
     private readonly Analyzer _analyzer;
-    private readonly LuceneVersion _version = LuceneVersion.LUCENE_48;
+    private readonly Analyzer _strictPhraseAnalyzer;
 
     public LuceneQueryBuilder(Analyzer analyzer)
     {
         _analyzer = analyzer ?? throw new ArgumentNullException(nameof(analyzer));
+        _strictPhraseAnalyzer = AnalyzerFactory.Create(LuceneVersion.LUCENE_48, enableSynonyms: false);
     }
 
-    public Query Build(string rawQuery)
+    public Query Build(string rawQuery, IndexReader? reader = null)
     {
         if (string.IsNullOrWhiteSpace(rawQuery))
             return new BooleanQuery();
 
-        var normalized = NormalizeForQuery(NormalizeWhitespace(rawQuery));
+        var quotedPhrases = ExtractQuotedPhrases(rawQuery)
+            .Select(q => AnalyzeToTerms(_strictPhraseAnalyzer, FieldContent, NormalizeForQuery(NormalizeWhitespace(q))))
+            .Where(q => q.Count >= 2)
+            .ToList();
+
+        var unquotedRaw = RemoveQuotedPhrases(rawQuery);
+        var normalized = NormalizeForQuery(NormalizeWhitespace(unquotedRaw));
 
         // ===== Field weighting =====
         const float BoostTitle = 4.0f;
@@ -53,7 +60,7 @@ public class LuceneQueryBuilder
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .ToList();
 
-        if (ordered.Count == 0)
+        if (ordered.Count == 0 && quotedPhrases.Count == 0)
             return new BooleanQuery();
 
         // Distinct tokens for “bag-of-words” parts
@@ -68,6 +75,22 @@ public class LuceneQueryBuilder
         {
             q.Boost = boost;
             root.Add(q, Occur.SHOULD);
+        }
+
+        void AddMust(Query q, float boost)
+        {
+            q.Boost = boost;
+            root.Add(q, Occur.MUST);
+        }
+
+        // Quoted text is strict: each quoted phrase must occur in title, filename, or content.
+        foreach (var phraseTerms in quotedPhrases)
+        {
+            var quoted = new BooleanQuery { MinimumNumberShouldMatch = 1 };
+            quoted.Add(Boost(BuildPhrase(FieldTitle, phraseTerms, ExactSlop), ExactPhraseBoost * BoostTitle), Occur.SHOULD);
+            quoted.Add(Boost(BuildPhrase(FieldFilename, phraseTerms, ExactSlop), ExactPhraseBoost * BoostFilename), Occur.SHOULD);
+            quoted.Add(Boost(BuildPhrase(FieldContent, phraseTerms, ExactSlop), ExactPhraseBoost * BoostContent), Occur.SHOULD);
+            AddMust(quoted, 1.0f);
         }
 
         // ------------------------------------------------------------
@@ -144,9 +167,18 @@ public class LuceneQueryBuilder
         }
 
         // ------------------------------------------------------------
-        // F) MinimumShouldMatch to reduce junk results for long queries
+        // F) Long pasted exam questions: boost distinctive/high-IDF terms.
         // ------------------------------------------------------------
-        root.MinimumNumberShouldMatch = ComputeMinShouldMatch(tokens.Count);
+        foreach (var rare in SelectDistinctiveTerms(tokens, reader).Take(8))
+        {
+            AddShould(new TermQuery(new Term(FieldContent, rare.Term)), rare.Boost);
+            AddShould(new TermQuery(new Term(FieldTitle, rare.Term)), rare.Boost * BoostTitle);
+        }
+
+        // ------------------------------------------------------------
+        // G) MinimumShouldMatch to reduce junk results for long queries
+        // ------------------------------------------------------------
+        root.MinimumNumberShouldMatch = ComputeMinShouldMatch(tokens.Count, quotedPhrases.Count);
 
         return root;
     }
@@ -158,19 +190,23 @@ public class LuceneQueryBuilder
         var normalized = NormalizeForQuery(NormalizeWhitespace(rawQuery));
 
         // Brug content-field så vi rammer samme pipeline som retrieval
-        return AnalyzeToTerms(FieldContent, normalized)
+        return AnalyzeToTerms(_analyzer, FieldContent, normalized)
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
-    private static int ComputeMinShouldMatch(int tokenCount)
+    private static int ComputeMinShouldMatch(int tokenCount, int quotedPhraseCount)
     {
-        // Good default: require more matches as query gets longer
+        if (tokenCount == 0 || quotedPhraseCount > 0 && tokenCount <= 2)
+            return 0;
+
         if (tokenCount <= 2) return 1;
         if (tokenCount <= 4) return 2;
-        if (tokenCount <= 7) return 3;
-        return Math.Max(3, (int)Math.Round(tokenCount * 0.5)); // ~50%
+        if (tokenCount <= 8) return 3;
+        if (tokenCount <= 16) return Math.Max(4, (int)Math.Ceiling(tokenCount * 0.45));
+        if (tokenCount <= 32) return Math.Max(5, (int)Math.Ceiling(tokenCount * 0.35));
+        return Math.Max(8, (int)Math.Ceiling(tokenCount * 0.25));
     }
 
     private static PhraseQuery BuildPhrase(string field, List<string> orderedTerms, int slop)
@@ -181,11 +217,68 @@ public class LuceneQueryBuilder
         return pq;
     }
 
+    private static Query Boost(Query q, float boost)
+    {
+        q.Boost = boost;
+        return q;
+    }
+
+    private IEnumerable<(string Term, float Boost)> SelectDistinctiveTerms(IReadOnlyList<string> tokens, IndexReader? reader)
+    {
+        if (tokens.Count < 8)
+            return Array.Empty<(string Term, float Boost)>();
+
+        var distinct = tokens
+            .Distinct(StringComparer.Ordinal)
+            .Where(t => t.Length >= 5)
+            .ToList();
+
+        var maxDoc = Math.Max(1, reader?.NumDocs ?? 1);
+
+        return distinct
+            .Select(t =>
+            {
+                var df = 0;
+                try
+                {
+                    df = reader?.DocFreq(new Term(FieldContent, t)) ?? 0;
+                }
+                catch
+                {
+                    df = 0;
+                }
+
+                var idf = MathF.Log(1f + (maxDoc / (float)(df + 1)));
+                var lengthBoost = MathF.Min(1.5f, t.Length / 10f);
+                return (Term: t, Boost: 2.5f + idf + lengthBoost);
+            })
+            .OrderByDescending(x => x.Boost);
+    }
+
+    private static List<string> ExtractQuotedPhrases(string rawQuery)
+    {
+        return Regex.Matches(rawQuery, "\"([^\"]+)\"")
+            .Cast<Match>()
+            .Select(m => m.Groups[1].Value.Trim())
+            .Where(x => x.Length > 0)
+            .ToList();
+    }
+
+    private static string RemoveQuotedPhrases(string rawQuery)
+    {
+        return Regex.Replace(rawQuery, "\"([^\"]+)\"", " ");
+    }
+
     private List<string> AnalyzeToTerms(string fieldName, string text)
+    {
+        return AnalyzeToTerms(_analyzer, fieldName, text);
+    }
+
+    private static List<string> AnalyzeToTerms(Analyzer analyzer, string fieldName, string text)
     {
         var terms = new List<string>();
         using var reader = new StringReader(text);
-        using var tokenStream = _analyzer.GetTokenStream(fieldName, reader);
+        using var tokenStream = analyzer.GetTokenStream(fieldName, reader);
 
         var termAttr = tokenStream.AddAttribute<ICharTermAttribute>();
         tokenStream.Reset();

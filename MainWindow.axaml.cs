@@ -2,13 +2,9 @@ using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using FileSearchTool.ViewModels;
 using System.Linq;
-using System.Threading.Tasks;
-using FileSearchTool.Services;
 using Avalonia.Input;
 using System;
-using System.IO;
 using Avalonia.Interactivity;
-using FileSearchTool.ViewModels;
 
 namespace FileSearchTool;
 
@@ -16,6 +12,9 @@ public partial class MainWindow : Window
 {
     private Canvas? _mainOverlay;
     private PdfPreviewViewModel? _hookedPreview;
+    private bool _isDraggingSidebar;
+    private double _sidebarDragStartX;
+    private double _sidebarDragStartWidth;
 
     public MainWindow()
     {
@@ -122,5 +121,34 @@ public partial class MainWindow : Window
             Canvas.SetTop(rect, r.Y);
             _mainOverlay.Children.Add(rect);
         }
+    }
+
+    private void SidebarSplitter_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+
+        _isDraggingSidebar = true;
+        _sidebarDragStartX = e.GetPosition(MainLayoutGrid).X;
+        _sidebarDragStartWidth = vm.SidebarWidth;
+        e.Pointer.Capture(SidebarSplitter);
+        e.Handled = true;
+    }
+
+    private void SidebarSplitter_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isDraggingSidebar || DataContext is not MainWindowViewModel vm) return;
+
+        var currentX = e.GetPosition(MainLayoutGrid).X;
+        vm.SetSidebarWidthFromDrag(_sidebarDragStartWidth + currentX - _sidebarDragStartX);
+        e.Handled = true;
+    }
+
+    private void SidebarSplitter_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_isDraggingSidebar) return;
+
+        _isDraggingSidebar = false;
+        e.Pointer.Capture(null);
+        e.Handled = true;
     }
 }

@@ -15,7 +15,7 @@ namespace FileSearchTool.Services.Lucene;
 
 public static class AnalyzerFactory
 {
-    public static Analyzer Create(LuceneVersion version)
+    public static Analyzer Create(LuceneVersion version, bool enableSynonyms = true)
     {
         var resourcesDir = Path.Combine(AppContext.BaseDirectory, "Resources");
 
@@ -24,8 +24,7 @@ public static class AnalyzerFactory
 
         // Ét synonymmap (bruges både index + query, fordi I bruger samme analyzer begge steder)
         var synonymsPath = Path.Combine(resourcesDir, "synonyms.txt");
-        //var synonymMap = SynonymLoader.TryLoad(version, synonymsPath);
-        SynonymMap? synonymMap = null; // synonyms slået fra
+        var synonymMap = enableSynonyms ? SynonymLoader.TryLoad(version, synonymsPath) : null;
 
         // Standard analyzer til title/filename/content
         var standard = new ClassicTextAnalyzer(version, stopEn, stopDa, synonymMap);
@@ -45,7 +44,7 @@ public static class AnalyzerFactory
         {
             if (!File.Exists(path))
             {
-                if (ignoreIfMissing) return CharArraySet.EMPTY_SET;
+                if (ignoreIfMissing) return CharArraySet.Empty;
                 throw new FileNotFoundException($"Stopwords file not found: {path}");
             }
 
@@ -58,7 +57,7 @@ public static class AnalyzerFactory
         }
         catch
         {
-            return CharArraySet.EMPTY_SET;
+            return CharArraySet.Empty;
         }
     }
 
@@ -75,7 +74,7 @@ public static class AnalyzerFactory
         public ClassicTextAnalyzer(LuceneVersion version, CharArraySet stopEn, CharArraySet stopDa, SynonymMap? synonyms)
         {
             _version = version;
-            _stop = CharArraySet.UnmodifiableSet(CharArraySet.Copy(version, stopEn.Concat(stopDa)));
+            _stop = CharArraySet.Copy(version, stopEn.Concat(stopDa)).AsReadOnly();
             _synonyms = synonyms;
         }
 

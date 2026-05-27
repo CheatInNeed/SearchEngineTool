@@ -32,6 +32,7 @@ public class LuceneIndexService
     private const string FieldDocId = "docId";
     private const string FieldParentPath = "parentPath";
     private const string FieldChunkIndex = "chunkIndex";
+    private const string FieldPageNumber = "pageNumber";
 
     private readonly LuceneIndexPaths _indexPaths;
     private readonly Analyzer _analyzer;
@@ -44,7 +45,7 @@ public class LuceneIndexService
     public LuceneIndexService()
     {
         _indexPaths = new LuceneIndexPaths();
-        _analyzer = new StandardAnalyzer(_version, CharArraySet.EMPTY_SET);
+        _analyzer = new StandardAnalyzer(_version, CharArraySet.Empty);
     }
 
     public LuceneIndexService(LuceneIndexPaths indexPaths, Analyzer analyzer)
@@ -80,11 +81,37 @@ public class LuceneIndexService
         }
     }
 
+    public bool HasPageNumberMetadata(string rootFolder)
+    {
+        try
+        {
+            var indexDirPath = _indexPaths.GetIndexDirectory(rootFolder);
+            using var dir = FSDirectory.Open(new DirectoryInfo(indexDirPath));
+
+            if (!DirectoryReader.IndexExists(dir))
+                return false;
+
+            using var reader = DirectoryReader.Open(dir);
+            for (int docId = 0; docId < reader.MaxDoc; docId++)
+            {
+                var doc = reader.Document(docId);
+                if (doc.GetField(FieldPageNumber) != null)
+                    return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Builds or updates the Lucene index for a given root folder.
     /// Incremental update: skips files where lastModifiedTicks is unchanged.
     /// </summary>
-    public Task BuildOrUpdateIndexAsync(string rootFolder, IEnumerable<(string path, string content, int chunkIndex)> docs)
+    public Task BuildOrUpdateIndexAsync(string rootFolder, IEnumerable<(string path, string content, int chunkIndex, int? pageNumber)> docs)
     {
         return Task.Run(() =>
         {
@@ -145,7 +172,7 @@ public class LuceneIndexService
                 writer.DeleteDocuments(new Term(FieldPath, path));
 
                 // Indeksér ALLE chunks for filen
-                foreach (var (p, content, chunkIndex) in group.OrderBy(x => x.chunkIndex))
+                foreach (var (p, content, chunkIndex, pageNumber) in group.OrderBy(x => x.chunkIndex))
                 {
                     if (string.IsNullOrWhiteSpace(p)) continue;
                     if (content == null) continue;
@@ -163,6 +190,7 @@ public class LuceneIndexService
                         new StringField(FieldDocId, docId, Field.Store.YES),
                         new StringField(FieldParentPath, path, Field.Store.YES),
                         new StoredField(FieldChunkIndex, chunkIndex),
+                        new StoredField(FieldPageNumber, pageNumber ?? 0),
 
                         new TextField(FieldTitle, title, Field.Store.YES),
                         new TextField(FieldFilename, fileName, Field.Store.YES),

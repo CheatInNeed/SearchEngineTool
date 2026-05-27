@@ -11,6 +11,47 @@ public static class SnippetMaker
 {
     // TODO: Ny metode der returnerer flere snippets pr dokument
     private static bool IsSingleToken(string p) => !p.Contains(' ');
+
+    public static IReadOnlyList<SnippetPart> MakeHighlightedSnippetParts(
+        string fullText,
+        string rawQuery,
+        IEnumerable<string> matchedTerms,
+        int windowSize = 220)
+    {
+        var snippet = MakeSnippets(
+                fullText,
+                rawQuery,
+                matchedTerms,
+                maxSnippets: 1,
+                windowSize: windowSize)
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(snippet))
+            return new[] { new SnippetPart("No snippet available.", false) };
+
+        return ParseBracketHighlights(snippet);
+    }
+
+    private static IReadOnlyList<SnippetPart> ParseBracketHighlights(string snippet)
+    {
+        var parts = new List<SnippetPart>();
+        var index = 0;
+
+        foreach (Match match in Regex.Matches(snippet, @"\[(.+?)\]"))
+        {
+            if (match.Index > index)
+                parts.Add(new SnippetPart(snippet.Substring(index, match.Index - index), false));
+
+            parts.Add(new SnippetPart(match.Groups[1].Value, true));
+            index = match.Index + match.Length;
+        }
+
+        if (index < snippet.Length)
+            parts.Add(new SnippetPart(snippet.Substring(index), false));
+
+        return parts.Count > 0 ? parts : new[] { new SnippetPart(snippet, false) };
+    }
+
     public static List<string> MakeSnippets(
         string fullText,
         string rawQuery,
@@ -239,4 +280,3 @@ public static class SnippetMaker
     }
 
 }
-
